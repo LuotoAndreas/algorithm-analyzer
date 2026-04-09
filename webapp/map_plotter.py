@@ -54,6 +54,54 @@ def _parse_edges(value) -> list[tuple[int, int]]:
 
     return []
 
+
+def _route_to_edges(route: list[int]) -> list[tuple[int, int]]:
+    """
+    Muuntaa reitin kaariksi muodossa (u, v).
+    """
+    return [(route[i], route[i + 1]) for i in range(len(route) - 1)]
+
+
+def _extract_detour_segments(
+    original_route: list[int],
+    final_route: list[int],
+) -> list[list[int]]:
+    """
+    Palauttaa toteutuneesta reitistä ne yhtenäiset osat, joita ei ollut alkuperäisessä reitissä.
+
+    Jokainen palautettu lista on pieni reittiosuus solmuina, jotta se voidaan
+    piirtää ox.plot_graph_route-funktiolla.
+    """
+    if not original_route or not final_route:
+        return []
+
+    original_edges = set(_route_to_edges(original_route))
+    final_edges = _route_to_edges(final_route)
+
+    detour_segments: list[list[int]] = []
+    current_segment: list[int] = []
+
+    for u, v in final_edges:
+        if (u, v) not in original_edges:
+            if not current_segment:
+                current_segment = [u, v]
+            else:
+                if current_segment[-1] == u:
+                    current_segment.append(v)
+                else:
+                    if len(current_segment) >= 2:
+                        detour_segments.append(current_segment)
+                    current_segment = [u, v]
+        else:
+            if len(current_segment) >= 2:
+                detour_segments.append(current_segment)
+            current_segment = []
+
+    if len(current_segment) >= 2:
+        detour_segments.append(current_segment)
+
+    return detour_segments
+
 def _set_route_view(ax, graph, routes: list[list[int]], padding_ratio: float = 0.15) -> None:
     node_ids = []
     for route in routes:
@@ -200,10 +248,11 @@ def plot_scenario_route(
     original_route,
     final_route,
     changed_edges,
+    change_type: str | None,
     filename: str,
     title: str | None = None,
     zoom_to_route: bool = False,
-) -> str: 
+) -> str:
     ensure_dir()
 
     original_route = _parse_route(original_route)
@@ -233,18 +282,15 @@ def plot_scenario_route(
             close=False,
         )
 
-    primary_changed_edge = changed_edges[0] if changed_edges else None
-    
-    changed_segment = _extract_changed_segment(
+    detour_segments = _extract_detour_segments(
         original_route,
         final_route,
-        primary_changed_edge,
     )
 
-    if changed_segment:
+    for detour_segment in detour_segments:
         ox.plot_graph_route(
             graph,
-            changed_segment,
+            detour_segment,
             route_linewidth=4,
             route_color="crimson",
             node_size=0,
@@ -254,25 +300,45 @@ def plot_scenario_route(
             close=False,
         )
 
-    closed_edge_label_added = False
+    change_label_added = False
 
-    for from_node, to_node in changed_edges:
-        if from_node in graph.nodes and to_node in graph.nodes:
-            x1 = graph.nodes[from_node]["x"]
-            y1 = graph.nodes[from_node]["y"]
-            x2 = graph.nodes[to_node]["x"]
-            y2 = graph.nodes[to_node]["y"]
+    if change_type == "remove":
+        for from_node, to_node in changed_edges:
+            if from_node in graph.nodes and to_node in graph.nodes:
+                x1 = graph.nodes[from_node]["x"]
+                y1 = graph.nodes[from_node]["y"]
+                x2 = graph.nodes[to_node]["x"]
+                y2 = graph.nodes[to_node]["y"]
 
-            ax.plot(
-                [x1, x2],
-                [y1, y2],
-                linewidth=4,
-                linestyle="-",
-                color="black",
-                zorder=5,
-                label="Suljettu tieosuus" if not closed_edge_label_added else None,
-            )
-            closed_edge_label_added = True
+                ax.plot(
+                    [x1, x2],
+                    [y1, y2],
+                    linewidth=4,
+                    linestyle="-",
+                    color="black",
+                    zorder=5,
+                    label="Suljettu tieosuus" if not change_label_added else None,
+                )
+                change_label_added = True
+
+    elif change_type == "increase_cost":
+        for from_node, to_node in changed_edges:
+            if from_node in graph.nodes and to_node in graph.nodes:
+                x1 = graph.nodes[from_node]["x"]
+                y1 = graph.nodes[from_node]["y"]
+                x2 = graph.nodes[to_node]["x"]
+                y2 = graph.nodes[to_node]["y"]
+
+                ax.plot(
+                    [x1, x2],
+                    [y1, y2],
+                    linewidth=4,
+                    linestyle="-",
+                    color="darkorange",
+                    zorder=5,
+                    label="Hidastunut tieosuus" if not change_label_added else None,
+                )
+                change_label_added = True
 
     if original_route:
         start_node = original_route[0]
@@ -287,17 +353,16 @@ def plot_scenario_route(
         ax.scatter(gx, gy, s=90, marker="X", color="red", zorder=6, label="Kohde")
 
     routes_for_zoom = [original_route]
-    if changed_segment:
-        routes_for_zoom.append(changed_segment)
+    routes_for_zoom.extend(detour_segments)
 
     if zoom_to_route:
         _set_route_view(ax, graph, routes_for_zoom, padding_ratio=0.20)
 
     if title:
         ax.set_title(title)
-    
+
     ax.plot([], [], color="royalblue", linewidth=3, label="Alkuperäinen reitti")
-    ax.plot([], [], color="crimson", linewidth=4, label="Muuttunut reittiosuus")
+    ax.plot([], [], color="crimson", linewidth=4, label="Kiertoreitti")
 
     handles, labels = ax.get_legend_handles_labels()
     if handles:

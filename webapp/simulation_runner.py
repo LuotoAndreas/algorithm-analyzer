@@ -63,10 +63,11 @@ def run_experiment(
 
         for planner in get_default_planners():
             environment = RoadEnvironment(graph)
-
+            
             event_copies = [
                 EdgeEvent(
                     event_step=event.event_step,
+                    event_time=event.event_time,
                     edge=event.edge,
                     change_type=event.change_type,
                     cost_multiplier=event.cost_multiplier,

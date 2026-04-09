@@ -2,9 +2,18 @@ import osmnx as ox
 import networkx as nx
 
 
-def load_map(place_name: str, network_type: str = "drive", simplify: bool = True, retain_all: bool = False):
+def load_map(
+    place_name: str,
+    network_type: str = "drive",
+    simplify: bool = True,
+    retain_all: bool = False,
+):
     """
     Lataa tieverkon OpenStreetMapista ja palauttaa sen graafina.
+
+    Lisäksi verkkoon lisätään:
+    - arvioidut nopeudet (speed_kph)
+    - matkustusajat sekunteina (travel_time)
 
     Args:
         place_name: Alueen nimi, esimerkiksi "Helsinki, Suomi"
@@ -21,6 +30,12 @@ def load_map(place_name: str, network_type: str = "drive", simplify: bool = True
         simplify=simplify,
         retain_all=retain_all,
     )
+
+    # Lisää arvioidut nopeudet tieverkon kaarille.
+    graph = ox.add_edge_speeds(graph)
+
+    # Lisää matkustusajat sekunteina nopeuksien ja pituuksien perusteella.
+    graph = ox.add_edge_travel_times(graph)
 
     return graph
 
@@ -41,9 +56,14 @@ def get_largest_strongly_connected_component(graph: nx.MultiDiGraph) -> nx.Multi
     return subgraph
 
 
-def load_clean_map(place_name: str, network_type: str = "drive", simplify: bool = True) -> nx.MultiDiGraph:
+def load_clean_map(
+    place_name: str,
+    network_type: str = "drive",
+    simplify: bool = True,
+) -> nx.MultiDiGraph:
     """
-    Lataa kartan ja rajaa sen suurimpaan vahvasti yhtenäiseen komponenttiin.
+    Lataa kartan, lisää nopeus- ja matkustusaikatiedot
+    ja rajaa verkon suurimpaan vahvasti yhtenäiseen komponenttiin.
 
     Args:
         place_name: Alueen nimi

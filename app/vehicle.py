@@ -16,6 +16,7 @@ class VehicleState:
     traversed_route: list[int] = field(default_factory=list)
 
     total_distance_travelled: float = 0.0
+    total_travel_time: float = 0.0
     replanning_count: int = 0
     has_arrived: bool = False
 
@@ -48,7 +49,7 @@ class VehicleState:
 
         return self.planned_route[1]
 
-    def advance_to_next_node(self, edge_length: float) -> None:
+    def advance_to_next_node(self, edge_length: float, edge_travel_time: float) -> None:
         """
         Siirtää ajoneuvon seuraavaan solmuun suunnitellulla reitillä.
         """
@@ -58,6 +59,7 @@ class VehicleState:
 
         self.current_node = next_node
         self.total_distance_travelled += edge_length
+        self.total_travel_time += edge_travel_time
         self.traversed_route.append(next_node)
 
         # Poistetaan reitin ensimmäinen solmu, koska siihen on jo saavuttu

@@ -49,6 +49,10 @@ class DStarLiteCore:
 
         self.initialized = False
 
+        # Heuristiikan turvallinen ylänopeus metreinä sekunnissa.
+        # 130 km/h ≈ 36.11 m/s
+        self.max_speed_mps = 130 / 3.6
+
     def initialize(self) -> None:
         self.g = {node: INF for node in self.graph.nodes}
         self.rhs = {node: INF for node in self.graph.nodes}
@@ -78,9 +82,19 @@ class DStarLiteCore:
         self.start = start
 
     def heuristic(self, node_a: int, node_b: int) -> float:
-        return haversine_distance(self.graph, node_a, node_b)
+        """
+        Heuristiikka sekunteina.
+
+        Muunnetaan linnuntie-etäisyys ajaksi jakamalla turvallisella
+        maksimi-nopeudella, jotta heuristiikka pysyy optimistisena.
+        """
+        distance_m = haversine_distance(self.graph, node_a, node_b)
+        return distance_m / self.max_speed_mps
 
     def edge_cost(self, u: int, v: int) -> float:
+        """
+        Kaaren kustannus sekunteina käyttäen travel_time-arvoa.
+        """
         if not self.graph.has_edge(u, v):
             return INF
 
@@ -88,16 +102,16 @@ class DStarLiteCore:
         if edge_data is None:
             return INF
 
-        lengths = []
+        travel_times = []
         for _, data in edge_data.items():
-            length = data.get("length")
-            if length is not None:
-                lengths.append(length)
+            travel_time = data.get("travel_time")
+            if travel_time is not None:
+                travel_times.append(travel_time)
 
-        if not lengths:
+        if not travel_times:
             return INF
 
-        return min(lengths)
+        return min(travel_times)
 
     def successors(self, node: int) -> list[int]:
         return list(self.graph.successors(node))
@@ -119,7 +133,6 @@ class DStarLiteCore:
         while self.queue:
             k1, k2, node = self.queue[0]
 
-            # Jos solmu on jo konsistentti, sitä ei pitäisi enää käsitellä
             if self.g[node] == self.rhs[node]:
                 heapq.heappop(self.queue)
                 continue
@@ -132,7 +145,6 @@ class DStarLiteCore:
         while self.queue:
             k1, k2, node = heapq.heappop(self.queue)
 
-            # Jos solmu on jo konsistentti, vanha jonoalkio ohitetaan
             if self.g[node] == self.rhs[node]:
                 continue
 
@@ -153,7 +165,7 @@ class DStarLiteCore:
 
         if self.g[node] != self.rhs[node]:
             self._push(node, self.calculate_key(node))
-            
+
     def compute_shortest_path(self) -> None:
         if not self.initialized:
             raise RuntimeError("D* Lite -ydintä ei ole alustettu. Kutsu initialize() ensin.")
@@ -230,6 +242,9 @@ class DStarLiteCore:
         return path
 
     def get_path_length(self, path: list[int]) -> float:
+        """
+        Palauttaa reitin kokonaiskustannuksen sekunteina.
+        """
         total = 0.0
         for i in range(len(path) - 1):
             total += self.edge_cost(path[i], path[i + 1])
@@ -259,8 +274,8 @@ class DStarLiteCore:
 
         if self.graph.has_edge(u, v):
             for _, edge_data in self.graph[u][v].items():
-                if "length" in edge_data:
-                    edge_data["length"] *= multiplier
+                if "travel_time" in edge_data:
+                    edge_data["travel_time"] *= multiplier
                     changed = True
 
         if changed:

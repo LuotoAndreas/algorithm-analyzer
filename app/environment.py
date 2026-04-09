@@ -40,7 +40,7 @@ class RoadEnvironment:
 
     def increase_edge_cost(self, from_node: int, to_node: int, multiplier: float) -> bool:
         """
-        Kasvattaa kaikkien kaarien length-arvoa solmujen from_node -> to_node välillä.
+        Kasvattaa kaikkien kaarien travel_time-arvoa solmujen from_node -> to_node välillä.
 
         Returns:
             True, jos vähintään yhden kaaren kustannusta muutettiin, muuten False.
@@ -49,8 +49,8 @@ class RoadEnvironment:
 
         if self.graph.has_edge(from_node, to_node):
             for _, edge_data in self.graph[from_node][to_node].items():
-                if "length" in edge_data:
-                    edge_data["length"] *= multiplier
+                if "travel_time" in edge_data:
+                    edge_data["travel_time"] *= multiplier
                     updated = True
 
         return updated

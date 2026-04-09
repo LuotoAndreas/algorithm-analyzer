@@ -57,6 +57,47 @@ def find_edge_index(route: list[int], edge: tuple[int, int]) -> int | None:
 
     return None
 
+def calculate_event_time_for_edge(
+    graph: nx.MultiDiGraph,
+    route: list[int],
+    edge_index: int,
+    rng: random.Random,
+) -> float | None:
+    """
+    Laskee tapahtumalle ajan sekunteina ennen valittua tieosuutta.
+
+    Aika muodostetaan kumulatiivisena travel_time-summana reitin alusta.
+    Tapahtuma sijoitetaan hieman ennen kyseistä kaarta, jotta muutos ehtii
+    tapahtua ajon aikana ennen kuin ajoneuvo saapuu esteelle.
+    """
+    if edge_index < 1:
+        return None
+
+    cumulative_time = 0.0
+
+    for i in range(edge_index):
+        u = route[i]
+        v = route[i + 1]
+
+        edge_data = graph.get_edge_data(u, v)
+        if edge_data is None:
+            return None
+
+        travel_times = [
+            data.get("travel_time")
+            for _, data in edge_data.items()
+            if data.get("travel_time") is not None
+        ]
+
+        if not travel_times:
+            return None
+
+        cumulative_time += min(travel_times)
+
+    # Laukaistaan tapahtuma hieman ennen kyseistä tieosuutta.
+    # Käytetään pientä satunnaista kerrointa, jotta tapahtuma ei ole aina täsmälleen
+    # samalla hetkellä.
+    return cumulative_time * rng.uniform(0.6, 0.95)
 
 def choose_event_step(edge_index: int, rng: random.Random) -> int | None:
     """
@@ -89,7 +130,7 @@ def generate_random_node_pair(graph: nx.MultiDiGraph, rng: random.Random) -> tup
 
 
 def select_multiple_events(
-    candidate_edges: list[tuple[tuple[int, int], int, int]],
+    candidate_edges: list[tuple[tuple[int, int], int, int, float]],
     event_count: int,
     change_type: str,
     cost_multiplier: float,
@@ -98,35 +139,36 @@ def select_multiple_events(
     """
     Valitsee useita tapahtumia samalta alkuperäiseltä reitiltä.
 
-    candidate_edges sisältää kolmikoita:
+    candidate_edges sisältää nelikoita:
     - edge
     - edge_index
     - event_step
+    - event_time
 
     Valinta tehdään reitin järjestyksessä siten, että tapahtumat eivät ole liian lähellä toisiaan.
     """
     if not candidate_edges or event_count <= 0:
         return []
 
-    # Järjestetään reitin etenemisjärjestykseen
     sorted_candidates = sorted(candidate_edges, key=lambda item: item[1])
 
-    selected: list[tuple[tuple[int, int], int, int]] = []
+    selected: list[tuple[tuple[int, int], int, int, float]] = []
     last_selected_index: int | None = None
 
-    for edge, edge_index, event_step in sorted_candidates:
+    for edge, edge_index, event_step, event_time in sorted_candidates:
         if last_selected_index is None or (edge_index - last_selected_index) >= min_index_gap:
-            selected.append((edge, edge_index, event_step))
+            selected.append((edge, edge_index, event_step, event_time))
             last_selected_index = edge_index
 
         if len(selected) >= event_count:
             break
 
     events: list[EdgeEvent] = []
-    for edge, _edge_index, event_step in selected:
+    for edge, _edge_index, event_step, event_time in selected:
         events.append(
             EdgeEvent(
                 event_step=event_step,
+                event_time=event_time,
                 edge=edge,
                 change_type=change_type,
                 cost_multiplier=cost_multiplier if change_type == "increase_cost" else None,
@@ -134,7 +176,6 @@ def select_multiple_events(
         )
 
     return events
-
 
 def generate_scenario(
     graph: nx.MultiDiGraph,
@@ -188,8 +229,10 @@ def generate_scenario(
                 continue
 
             event_step = choose_event_step(edge_index, rng)
-            if event_step is not None:
-                candidate_edges.append((edge, edge_index, event_step))
+            event_time = calculate_event_time_for_edge(graph, reference_route, edge_index, rng)
+
+            if event_step is not None and event_time is not None:
+                candidate_edges.append((edge, edge_index, event_step, event_time))
 
         if not candidate_edges:
             continue

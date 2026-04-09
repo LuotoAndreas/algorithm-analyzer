@@ -57,8 +57,22 @@
                                     </div>
                                 {% endif %}
                                 <div>
-                                    <strong>Keskim. alkuperäinen reitti:</strong>
-                                    {{ "%.2f"|format(values["avg_original_route_length"]) if values["avg_original_route_length"] is not none else "N/A" }}
+                                    <strong>Keskim. alkuperäinen aika (s):</strong>
+                                    {{ "%.2f"|format(values["avg_original_route_travel_time"]) if values["avg_original_route_travel_time"] is not none else "N/A" }}
+                                </div>
+                                <div>
+                                    <strong>Keskim. alkuperäinen aika muutosten kanssa (s):</strong>
+                                    {{ "%.2f"|format(values["avg_original_route_travel_time_with_events"]) if values["avg_original_route_travel_time_with_events"] is not none else "N/A" }}
+                                </div>
+
+                                <div>
+                                    <strong>Keskim. toteutunut aika (s):</strong>
+                                    {{ "%.2f"|format(values["avg_total_travel_time"]) if values["avg_total_travel_time"] is not none else "N/A" }}
+                                </div>
+
+                                <div>
+                                    <strong>Keskim. uudelleenreitityksen hyöty (s):</strong>
+                                    {{ "%.2f"|format(values["avg_replanning_time_saved"]) if values["avg_replanning_time_saved"] is not none else "N/A" }}
                                 </div>
                                 <div>
                                     <strong>Keskim. toteutunut matka:</strong>
@@ -91,31 +105,37 @@
                                 <th>Skenaario</th>
                                 <th>Algoritmi</th>
                                 <th>Onnistui</th>
-                                <th>Alkuperäinen pituus</th>
-                                <th>Toteutunut matka</th>
+                                <th>Alkuperäinen aika (s)</th>
+                                <th>Alkuperäinen aika muutoksilla (s)</th>
+                                <th>Toteutunut aika (s)</th>
+                                <th>Uudelleenreitityksen hyöty (s)</th>
+                                <th>Toteutunut matka (m)</th>
                                 <th>Piteneminen %</th>
-                                <th>Kokonaisaika</th>
+                                <th>Kokonaislaskenta-aika (s)</th>
                                 <th>Epäonnistumisen syy</th>
                                 <th>Kategoria</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for row in result.rows %}
-                            <tr>
-                                <td>{{ row["scenario_id"] }}</td>
-                                <td>{{ row["algorithm_name"] }}</td>
-                                <td>
-                                    <span class="{{ 'status-ok' if not row['failed'] else 'status-fail' }}">
-                                        {{ "Kyllä" if not row["failed"] else "Ei" }}
-                                    </span>
-                                </td>
-                                <td>{{ "%.2f"|format(row["original_route_length"]) if row["original_route_length"] is not none else "N/A" }}</td>
-                                <td>{{ "%.2f"|format(row["total_distance_travelled"]) if row["total_distance_travelled"] is not none else "N/A" }}</td>
-                                <td>{{ "%.2f"|format(row["distance_increase_pct"]) if row["distance_increase_pct"] is not none else "N/A" }}</td>
-                                <td>{{ "%.6f"|format(row["total_planning_time"]) if row["total_planning_time"] is not none else "N/A" }}</td>
-                                <td>{{ row["failure_reason"] if row["failure_reason"] else "-" }}</td>
-                                <td>{{ row["failure_category"] if row["failure_category"] else "-" }}</td>
-                            </tr>
+                                <tr>
+                                    <td>{{ row["scenario_id"] }}</td>
+                                    <td>{{ row["algorithm_name"] }}</td>
+                                    <td>
+                                        <span class="{{ 'status-ok' if not row['failed'] else 'status-fail' }}">
+                                            {{ "Kyllä" if not row["failed"] else "Ei" }}
+                                        </span>
+                                    </td>
+                                    <td>{{ "%.2f"|format(row["original_route_travel_time"]) if row["original_route_travel_time"] is not none else "N/A" }}</td>
+                                    <td>{{ "%.2f"|format(row["original_route_travel_time_with_events"]) if row["original_route_travel_time_with_events"] is not none else "N/A" }}</td>
+                                    <td>{{ "%.2f"|format(row["total_travel_time"]) if row["total_travel_time"] is not none else "N/A" }}</td>
+                                    <td>{{ "%.2f"|format(row["replanning_time_saved"]) if row["replanning_time_saved"] is not none else "N/A" }}</td>
+                                    <td>{{ "%.2f"|format(row["total_distance_travelled"]) if row["total_distance_travelled"] is not none else "N/A" }}</td>
+                                    <td>{{ "%.2f"|format(row["distance_increase_pct"]) if row["distance_increase_pct"] is not none else "N/A" }}</td>
+                                    <td>{{ "%.6f"|format(row["total_planning_time"]) if row["total_planning_time"] is not none else "N/A" }}</td>
+                                    <td>{{ row["failure_reason"] if row["failure_reason"] else "-" }}</td>
+                                    <td>{{ row["failure_category"] if row["failure_category"] else "-" }}</td>
+                                </tr>
                             {% endfor %}
                         </tbody>
                     </table>
@@ -181,9 +201,30 @@
                                             </div>
 
                                             <div class="info-item">
-                                                <strong>Alkuperäinen pituus</strong>
+                                                <strong>Alkuperäinen aika (s)</strong>
                                                 <span>
-                                                    {{ "%.2f"|format(row["original_route_length"]) if row["original_route_length"] is not none else "N/A" }}
+                                                    {{ "%.2f"|format(row["original_route_travel_time"]) if row["original_route_travel_time"] is not none else "N/A" }}
+                                                </span>
+                                            </div>
+
+                                            <div class="info-item">
+                                                <strong>Alkuperäinen aika muutoksilla (s)</strong>
+                                                <span>
+                                                    {{ "%.2f"|format(row["original_route_travel_time_with_events"]) if row["original_route_travel_time_with_events"] is not none else "N/A" }}
+                                                </span>
+                                            </div>
+
+                                            <div class="info-item">
+                                                <strong>Toteutunut aika (s)</strong>
+                                                <span>
+                                                    {{ "%.2f"|format(row["total_travel_time"]) if row["total_travel_time"] is not none else "N/A" }}
+                                                </span>
+                                            </div>
+
+                                            <div class="info-item">
+                                                <strong>Uudelleenreitityksen hyöty (s)</strong>
+                                                <span>
+                                                    {{ "%.2f"|format(row["replanning_time_saved"]) if row["replanning_time_saved"] is not none else "N/A" }}
                                                 </span>
                                             </div>
 

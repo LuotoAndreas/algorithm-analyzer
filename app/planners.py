@@ -14,7 +14,7 @@ class PlanResult:
     Yhden reitinsuunnittelukerran tulos.
     """
     route: list[int]
-    length: float
+    travel_time: float
     planning_time: float
     expanded_nodes: int | None = None
     touched_edges: int | None = None
@@ -65,7 +65,7 @@ class BasePlanner(ABC):
         D* Lite voi myöhemmin ylikirjoittaa tämän.
         """
         return self.plan(graph, start_node, goal_node)
-    
+
     def notify_agent_moved(self, new_start_node: int) -> None:
         """
         Hook plannerille tilanteisiin, joissa agentti liikkuu yhden askeleen eteenpäin.
@@ -87,16 +87,16 @@ class DijkstraPlanner(BasePlanner):
             graph,
             source=start_node,
             target=goal_node,
-            weight="length",
+            weight="travel_time",
             method="dijkstra",
         )
-        length = nx.path_weight(graph, route, weight="length")
+        travel_time = nx.path_weight(graph, route, weight="travel_time")
 
         planning_time = time.perf_counter() - start_time
 
         return PlanResult(
             route=route,
-            length=length,
+            travel_time=travel_time,
             planning_time=planning_time,
         )
 
@@ -113,17 +113,18 @@ class AStarPlanner(BasePlanner):
             start_node,
             goal_node,
             heuristic=lambda a, b: haversine_distance(graph, a, b),
-            weight="length",
+            weight="travel_time",
         )
-        length = nx.path_weight(graph, route, weight="length")
+        travel_time = nx.path_weight(graph, route, weight="travel_time")
 
         planning_time = time.perf_counter() - start_time
 
         return PlanResult(
             route=route,
-            length=length,
+            travel_time=travel_time,
             planning_time=planning_time,
         )
+
 
 class DStarLitePlanner(BasePlanner):
     def __init__(self):
@@ -140,7 +141,7 @@ class DStarLitePlanner(BasePlanner):
         self.core.compute_shortest_path()
 
         route = self.core.get_path()
-        length = self.core.get_path_length(route)
+        travel_time = self.core.get_path_length(route)
 
         planning_time = time.perf_counter() - start_time
 
@@ -149,7 +150,7 @@ class DStarLitePlanner(BasePlanner):
 
         return PlanResult(
             route=route,
-            length=length,
+            travel_time=travel_time,
             planning_time=planning_time,
         )
 
@@ -167,13 +168,13 @@ class DStarLitePlanner(BasePlanner):
         self.core.compute_shortest_path()
 
         route = self.core.get_path()
-        length = self.core.get_path_length(route)
+        travel_time = self.core.get_path_length(route)
 
         planning_time = time.perf_counter() - start_time
 
         return PlanResult(
             route=route,
-            length=length,
+            travel_time=travel_time,
             planning_time=planning_time,
         )
 
@@ -214,6 +215,7 @@ class DStarLitePlanner(BasePlanner):
             return self.core.increase_edge_cost(u, v, cost_multiplier)
 
         raise ValueError(f"Tuntematon change_type: {change_type}")
+
 
 def get_default_planners() -> list[BasePlanner]:
     """

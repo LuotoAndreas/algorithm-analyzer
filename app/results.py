@@ -15,6 +15,7 @@ DEFAULT_FIELDNAMES = [
     "change_type",
     "changed_edge",
     "event_step",
+    "event_time",
     "event_triggered",
     "event_successfully_applied",
     "cost_multiplier",
@@ -25,7 +26,11 @@ DEFAULT_FIELDNAMES = [
     "final_traversed_edge_count",
 
     "original_route_length",
+    "original_route_travel_time",
+    "original_route_travel_time_with_events",
     "total_distance_travelled",
+    "total_travel_time",
+    "replanning_time_saved",
     "distance_increase",
     "distance_increase_pct",
 

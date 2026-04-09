@@ -28,7 +28,10 @@ class SimulationResult:
     total_planning_time: float
 
     original_route_length: float
+    original_route_travel_time: float
+    original_route_travel_time_with_events: float | None
     total_distance_travelled: float
+    total_travel_time: float
 
     replanning_count: int
     event_triggered: bool
@@ -84,6 +87,26 @@ class DynamicRouteSimulation:
 
         return min(lengths)
 
+    def _get_edge_travel_time(self, from_node: int, to_node: int) -> float:
+        """
+        Palauttaa kaaren pienimmän travel_time-kustannuksen sekunteina.
+        """
+        edge_data = self.environment.graph.get_edge_data(from_node, to_node)
+
+        if edge_data is None:
+            raise ValueError(f"Kaarta {from_node} -> {to_node} ei löytynyt ympäristöstä.")
+
+        travel_times = []
+        for _, data in edge_data.items():
+            travel_time = data.get("travel_time")
+            if travel_time is not None:
+                travel_times.append(travel_time)
+
+        if not travel_times:
+            raise ValueError(f"Kaaren {from_node} -> {to_node} travel_time-arvo puuttuu.")
+
+        return min(travel_times)
+
     def _future_route_contains_event_edge(self, vehicle: VehicleState, event: EdgeEvent) -> bool:
         """
         Tarkistaa, sisältääkö ajoneuvon jäljellä oleva reitti eventin kohdekaaren.
@@ -97,6 +120,120 @@ class DynamicRouteSimulation:
 
         return False
 
+    def _calculate_route_length(self, route: list[int]) -> float:
+        """
+        Laskee annetun reitin kokonaispituuden metreinä.
+        """
+        total_length = 0.0
+
+        for i in range(len(route) - 1):
+            total_length += self._get_edge_length(route[i], route[i + 1])
+
+        return total_length
+
+    def _calculate_route_travel_time_on_graph(self, route: list[int], graph) -> float | None:
+        """
+        Laskee annetun reitin kokonaisajan annetussa graafissa.
+
+        Palauttaa None, jos jokin reitin kaari puuttuu graafista
+        tai joltakin kaarelta puuttuu travel_time.
+        """
+        total_time = 0.0
+
+        for i in range(len(route) - 1):
+            u = route[i]
+            v = route[i + 1]
+
+            edge_data = graph.get_edge_data(u, v)
+            if edge_data is None:
+                return None
+
+            travel_times = []
+            for _, data in edge_data.items():
+                travel_time = data.get("travel_time")
+                if travel_time is not None:
+                    travel_times.append(travel_time)
+
+            if not travel_times:
+                return None
+
+            total_time += min(travel_times)
+
+        return total_time
+
+    def _simulate_original_route_with_events(self, original_route: list[int]) -> float | None:
+        """
+        Simuloi alkuperäisen reitin läpikulun ilman uudelleenreititystä,
+        mutta huomioiden tapahtumat ajon aikana.
+
+        Palauttaa:
+        - kokonaisajan sekunteina
+        - None jos reitti katkeaa (remove)
+        """
+        total_time = 0.0
+        step_index = 0
+
+        temp_graph = self.environment.graph.copy()
+
+        # Tärkeää: baseline-simulaatiossa ei saa käyttää event.triggered-tilaa,
+        # koska se sotkisi varsinaisen simulaation. Siksi pidetään paikallisesti
+        # kirjaa jo sovelletuista tapahtumista.
+        applied_event_indices: set[int] = set()
+
+        for i in range(len(original_route) - 1):
+            current_time = total_time
+            u = original_route[i]
+            v = original_route[i + 1]
+
+            for event_index, event in enumerate(self.events):
+                if event_index in applied_event_indices:
+                    continue
+
+                should_apply = False
+
+                if event.event_time is not None:
+                    should_apply = current_time >= event.event_time
+                elif event.event_step is not None:
+                    should_apply = step_index >= event.event_step
+
+                if not should_apply:
+                    continue
+
+                if event.change_type == "remove":
+                    if temp_graph.has_edge(*event.edge):
+                        edge_keys = list(temp_graph[event.edge[0]][event.edge[1]].keys())
+                        for key in edge_keys:
+                            temp_graph.remove_edge(event.edge[0], event.edge[1], key)
+
+                elif event.change_type == "increase_cost":
+                    if temp_graph.has_edge(*event.edge):
+                        for _, data in temp_graph[event.edge[0]][event.edge[1]].items():
+                            if "travel_time" in data and event.cost_multiplier is not None:
+                                data["travel_time"] *= event.cost_multiplier
+
+                applied_event_indices.add(event_index)
+
+            if not temp_graph.has_edge(u, v):
+                return None
+
+            edge_data = temp_graph.get_edge_data(u, v)
+            if edge_data is None:
+                return None
+
+            travel_times = []
+            for _, data in edge_data.items():
+                travel_time = data.get("travel_time")
+                if travel_time is not None:
+                    travel_times.append(travel_time)
+
+            if not travel_times:
+                return None
+
+            total_time += min(travel_times)
+            step_index += 1
+
+        return total_time
+
     def run(self) -> SimulationResult:
         """
         Suorittaa koko simulaation yhdelle algoritmille.
@@ -108,6 +245,7 @@ class DynamicRouteSimulation:
         failure_reason = None
         failure_category = None
         route_changed_after_event = False
+        original_route_travel_time_with_events = None
 
         first_event = self.events[0] if self.events else None
         last_triggered_event: EdgeEvent | None = None
@@ -130,7 +268,10 @@ class DynamicRouteSimulation:
                 replanning_time_total=0.0,
                 total_planning_time=0.0,
                 original_route_length=0.0,
+                original_route_travel_time=0.0,
+                original_route_travel_time_with_events=None,
                 total_distance_travelled=0.0,
+                total_travel_time=0.0,
                 replanning_count=0,
                 event_triggered=False,
                 event_successfully_applied=False,
@@ -152,14 +293,18 @@ class DynamicRouteSimulation:
         vehicle.initialize_route(initial_plan.route)
 
         original_route = initial_plan.route.copy()
-        original_route_length = initial_plan.length
+        original_route_length = self._calculate_route_length(original_route)
+        original_route_travel_time = initial_plan.travel_time
+        original_route_travel_time_with_events = self._simulate_original_route_with_events(original_route)
         original_planning_time = initial_plan.planning_time
 
         step_index = 0
 
         while not vehicle.has_arrived:
+            current_time = vehicle.total_travel_time
+
             for event in self.events:
-                if event.should_trigger(step_index):
+                if event.should_trigger(current_step=step_index, current_time=current_time):
                     event_triggered = True
                     event.mark_triggered()
                     last_triggered_event = event
@@ -217,9 +362,13 @@ class DynamicRouteSimulation:
                 )
                 failure_category = "edge_unavailable"
                 break
-            
+
             edge_length = self._get_edge_length(vehicle.current_node, next_node)
-            vehicle.advance_to_next_node(edge_length=edge_length)
+            edge_travel_time = self._get_edge_travel_time(vehicle.current_node, next_node)
+            vehicle.advance_to_next_node(
+                edge_length=edge_length,
+                edge_travel_time=edge_travel_time,
+            )
 
             if hasattr(self.planner, "notify_agent_moved"):
                 self.planner.notify_agent_moved(vehicle.current_node)
@@ -239,7 +388,10 @@ class DynamicRouteSimulation:
             replanning_time_total=replanning_time_total,
             total_planning_time=original_planning_time + replanning_time_total,
             original_route_length=original_route_length,
+            original_route_travel_time=original_route_travel_time,
+            original_route_travel_time_with_events=original_route_travel_time_with_events,
             total_distance_travelled=vehicle.total_distance_travelled,
+            total_travel_time=vehicle.total_travel_time,
             replanning_count=vehicle.replanning_count,
             event_triggered=event_triggered,
             event_successfully_applied=event_successfully_applied,
