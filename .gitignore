@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.env
+.venv
+venv/
+env/
+
+# Pyenv
+.python-version
+
+# VSCode
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Flask
+instance/
+.webassets-cache
+
+# Data / outputs (tärkeä sun projektissa)
+data/
+webapp/static/routes/
+webapp/static/plots/
+
+# CSV outputit
+*.csv
+
+# Matplotlib cache
+.matplotlib/
+
+# Jupyter (jos käytät joskus)
+.ipynb_checkpoints/
+
+# cache
+cache/

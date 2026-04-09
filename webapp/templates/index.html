@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="fi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynaamisen reitinhaun analyysi</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="page-shell">
+        <header class="page-header">
+            <p class="eyebrow">Analyysiympäristö</p>
+            <h1>Dynaamisen reitinhaun analyysi</h1>
+            <p class="description">
+                Tällä työkalulla voidaan ajaa simuloituja reitinhakukokeita ja tarkastella algoritmien toimintaa dynaamisessa tieverkossa.
+            </p>
+        </header>
+
+        <main class="content">
+            <section class="card">
+                <h2>Kokeen parametrit</h2>
+
+                <form method="post" action="/run" id="experiment-form">
+                    <label class="field-group">
+                        <span>Alueen nimi</span>
+                        <input type="text" name="place_name" value="Kamppi, Helsinki, Suomi">
+                    </label>
+
+                    <label class="field-group">
+                        <span>Seed</span>
+                        <input type="number" name="seed" value="42">
+                    </label>
+
+                    <label class="field-group">
+                        <span>Testien määrä</span>
+                        <input type="number" name="target_count" value="3" min="1">
+                    </label>
+
+                    <label class="field-group">
+                        <span>Maksimiyritykset</span>
+                        <input type="number" name="max_attempts" value="20" min="1">
+                    </label>
+
+                    <label class="field-group">
+                        <span>Muutostyyppi</span>
+                        <select name="change_type">
+                            <option value="remove">remove</option>
+                            <option value="increase_cost">increase_cost</option>
+                        </select>
+                    </label>
+
+                    <label class="field-group">
+                        <span>Kustannuskerroin</span>
+                        <input type="number" name="cost_multiplier" value="3.0" step="0.1" min="1">
+                    </label>
+
+                    <div class="button-row">
+                        <button type="submit" id="submit-button">Aja kokeet</button>
+                    </div>
+                </form>
+            </section>
+        </main>
+    </div>
+
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="loading-box">
+            <div class="spinner" aria-hidden="true"></div>
+            <h2>Kokeita suoritetaan</h2>
+            <p>Reittejä haetaan ja tuloksia lasketaan. Tämä voi kestää hetken.</p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const form = document.getElementById("experiment-form");
+            const overlay = document.getElementById("loading-overlay");
+            const submitButton = document.getElementById("submit-button");
+
+            form.addEventListener("submit", function () {
+                overlay.classList.remove("hidden");
+                submitButton.disabled = true;
+                submitButton.textContent = "Suoritetaan...";
+            });
+        });
+    </script>
+</body>
+</html>

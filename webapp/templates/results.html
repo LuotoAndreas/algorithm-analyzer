@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="fi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kokeen tulokset</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="page-shell">
+        <header class="page-header">
+            <p class="eyebrow">Tulokset</p>
+            <h1>Dynaamisen reitinhaun analyysi</h1>
+            <p class="description">
+                Alla näkyvät suoritetun kokeen yhteenvetotiedot, algoritmikohtaiset tulokset sekä skenaariokohtaiset tarkemmat näkymät.
+            </p>
+        </header>
+
+        <main class="content">
+            <section class="card">
+                <h2>Kokeen asetukset</h2>
+                <div class="info-grid">
+                    <div class="info-item"><strong>Alue</strong><span>{{ result.place_name }}</span></div>
+                    <div class="info-item"><strong>Seed</strong><span>{{ result.seed }}</span></div>
+                    <div class="info-item"><strong>Testien tavoitemäärä</strong><span>{{ result.target_count }}</span></div>
+                    <div class="info-item"><strong>Maksimiyritykset</strong><span>{{ result.max_attempts }}</span></div>
+                    <div class="info-item"><strong>Muutostyyppi</strong><span>{{ result.change_type }}</span></div>
+                    <div class="info-item"><strong>Kustannuskerroin</strong><span>{{ result.cost_multiplier }}</span></div>
+                    <div class="info-item"><strong>Hyväksyttyjä skenaarioita</strong><span>{{ result.accepted_scenarios }}</span></div>
+                    <div class="info-item info-item-wide"><strong>Tallennettu tiedosto</strong><span>{{ result.output_path }}</span></div>
+                </div>
+            </section>
+
+            <section class="card">
+                <h2>Algoritmikohtainen yhteenveto</h2>
+
+                <div class="summary-grid">
+                    {% for algorithm_name, values in result.summary.items() %}
+                        <article class="metric-card">
+                            <h3>{{ algorithm_name }}</h3>
+                            <div class="metric-list">
+                                <div><strong>Skenaarioita:</strong> {{ values["scenario_count"] }}</div>
+                                <div><strong>Onnistuneita:</strong> {{ values["successful_count"] }}</div>
+                                <div><strong>Epäonnistuneita:</strong> {{ values["failed_count"] }}</div>
+                                {% if values["failure_category_counts"] %}
+                                    <div>
+                                        <strong>Epäonnistumisten kategoriat:</strong>
+                                        <ul class="failure-list">
+                                            {% for category, count in values["failure_category_counts"].items() %}
+                                                <li>{{ category }}: {{ count }}</li>
+                                            {% endfor %}
+                                        </ul>
+                                    </div>
+                                {% endif %}
+                                <div>
+                                    <strong>Keskim. alkuperäinen reitti:</strong>
+                                    {{ "%.2f"|format(values["avg_original_route_length"]) if values["avg_original_route_length"] is not none else "N/A" }}
+                                </div>
+                                <div>
+                                    <strong>Keskim. toteutunut matka:</strong>
+                                    {{ "%.2f"|format(values["avg_total_distance_travelled"]) if values["avg_total_distance_travelled"] is not none else "N/A" }}
+                                </div>
+                                <div>
+                                    <strong>Keskim. piteneminen (%):</strong>
+                                    {{ "%.2f"|format(values["avg_distance_increase_pct"]) if values["avg_distance_increase_pct"] is not none else "N/A" }}
+                                </div>
+                                <div>
+                                    <strong>Keskim. kokonaislaskenta-aika:</strong>
+                                    {{ "%.6f"|format(values["avg_total_planning_time"]) if values["avg_total_planning_time"] is not none else "N/A" }}
+                                </div>
+                                <div>
+                                    <strong>Keskim. reitin muutosaste:</strong>
+                                    {{ "%.3f"|format(values["avg_route_change_ratio"]) if values["avg_route_change_ratio"] is not none else "N/A" }}
+                                </div>
+                            </div>
+                        </article>
+                    {% endfor %}
+                </div>
+            </section>
+
+            <section class="card">
+                <h2>Yksittäiset tulosrivit</h2>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Skenaario</th>
+                                <th>Algoritmi</th>
+                                <th>Onnistui</th>
+                                <th>Alkuperäinen pituus</th>
+                                <th>Toteutunut matka</th>
+                                <th>Piteneminen %</th>
+                                <th>Kokonaisaika</th>
+                                <th>Epäonnistumisen syy</th>
+                                <th>Kategoria</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in result.rows %}
+                            <tr>
+                                <td>{{ row["scenario_id"] }}</td>
+                                <td>{{ row["algorithm_name"] }}</td>
+                                <td>
+                                    <span class="{{ 'status-ok' if not row['failed'] else 'status-fail' }}">
+                                        {{ "Kyllä" if not row["failed"] else "Ei" }}
+                                    </span>
+                                </td>
+                                <td>{{ "%.2f"|format(row["original_route_length"]) if row["original_route_length"] is not none else "N/A" }}</td>
+                                <td>{{ "%.2f"|format(row["total_distance_travelled"]) if row["total_distance_travelled"] is not none else "N/A" }}</td>
+                                <td>{{ "%.2f"|format(row["distance_increase_pct"]) if row["distance_increase_pct"] is not none else "N/A" }}</td>
+                                <td>{{ "%.6f"|format(row["total_planning_time"]) if row["total_planning_time"] is not none else "N/A" }}</td>
+                                <td>{{ row["failure_reason"] if row["failure_reason"] else "-" }}</td>
+                                <td>{{ row["failure_category"] if row["failure_category"] else "-" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="card">
+                <h2>Kuvaajat</h2>
+
+                <div class="chart-grid">
+                    <div class="chart-card">
+                        <h3>Matkan piteneminen (%)</h3>
+                        <img src="{{ url_for('static', filename='plots/distance.png') }}" alt="Matkan piteneminen algoritmeittain">
+                    </div>
+
+                    <div class="chart-card">
+                        <h3>Kokonaislaskenta-aika (s)</h3>
+                        <img src="{{ url_for('static', filename='plots/time.png') }}" alt="Kokonaislaskenta-aika algoritmeittain">
+                    </div>
+                </div>
+            </section>
+
+            <section class="card">
+                <h2>Skenaariokohtaiset vertailut</h2>
+                <p class="section-note">
+                    Avaa skenaario nähdäksesi kaikkien algoritmien tulokset rinnakkain.
+                    Karttaa klikkaamalla voit vaihtaa koko alueen ja reittizoomin välillä.
+                </p>
+
+                {% for scenario_id, scenario_rows in result.grouped_rows.items() %}
+                    <details
+                        id="scenario-{{ scenario_id }}"
+                        class="scenario-details"
+                        {% if result.get("open_scenario") == scenario_id %}open{% endif %}
+                    >
+                        <summary>
+                            <span><strong>Skenaario {{ scenario_id }}</strong></span>
+                            <span>{{ scenario_rows|length }} algoritmia</span>
+                        </summary>
+
+                        <div class="scenario-content">
+                            {% set first_row = scenario_rows[0] %}
+
+                            {% if not first_row["route_image_full"] %}
+                                <a
+                                    class="generate-map-button"
+                                    href="{{ url_for('generate_scenario_routes', run_id=result['run_id'], scenario_id=scenario_id, open_scenario=scenario_id) }}#scenario-{{ scenario_id }}"
+                                >
+                                    Generoi tämän skenaarion kartat
+                                </a>
+                            {% endif %}
+                            <div class="scenario-grid">
+                                {% for row in scenario_rows %}
+                                    <article class="algorithm-card">
+                                        <h3>{{ row["algorithm_name"] }}</h3>
+
+                                        <div class="info-grid">
+                                            <div class="info-item">
+                                                <strong>Onnistui</strong>
+                                                <span class="{{ 'status-ok' if not row['failed'] else 'status-fail' }}">
+                                                    {{ "Kyllä" if not row["failed"] else "Ei" }}
+                                                </span>
+                                            </div>
+
+                                            <div class="info-item">
+                                                <strong>Alkuperäinen pituus</strong>
+                                                <span>
+                                                    {{ "%.2f"|format(row["original_route_length"]) if row["original_route_length"] is not none else "N/A" }}
+                                                </span>
+                                            </div>
+
+                                            <div class="info-item">
+                                                <strong>Toteutunut matka</strong>
+                                                <span>
+                                                    {{ "%.2f"|format(row["total_distance_travelled"]) if row["total_distance_travelled"] is not none else "N/A" }}
+                                                </span>
+                                            </div>
+
+                                            <div class="info-item">
+                                                <strong>Piteneminen %</strong>
+                                                <span>
+                                                    {{ "%.2f"|format(row["distance_increase_pct"]) if row["distance_increase_pct"] is not none else "N/A" }}
+                                                </span>
+                                            </div>
+
+                                            <div class="info-item">
+                                                <strong>Kokonaisaika</strong>
+                                                <span>
+                                                    {{ "%.6f"|format(row["total_planning_time"]) if row["total_planning_time"] is not none else "N/A" }}
+                                                </span>
+                                            </div>
+                                            {% if row["failed"] %}
+                                                <div class="info-item info-item-wide">
+                                                    <strong>Epäonnistumisen syy</strong>
+                                                    <span>{{ row["failure_reason"] if row["failure_reason"] else "Tuntematon syy" }}</span>
+                                                </div>
+
+                                                <div class="info-item info-item-wide">
+                                                    <strong>Epäonnistumisen kategoria</strong>
+                                                    <span>{{ row["failure_category"] if row["failure_category"] else "Ei määritelty" }}</span>
+                                                </div>
+                                            {% endif %}
+                                        </div>
+
+                                        {% if row["route_image_full"] %}
+                                            <img
+                                                class="route-image toggle-route-image"
+                                                src="{{ url_for('static', filename=row['route_image_full']) }}"
+                                                data-full="{{ url_for('static', filename=row['route_image_full']) }}"
+                                                data-zoom="{{ url_for('static', filename=row['route_image_zoom']) }}"
+                                                data-state="full"
+                                                alt="Skenaarion kartta"
+                                                title="Klikkaa vaihtaaksesi zoomattuun näkymään"
+                                            >
+                                        {% endif %}
+                                    </article>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </details>
+                {% endfor %}
+            </section>
+
+            <section class="card">
+                <a class="back-link" href="/">← Takaisin etusivulle</a>
+            </section>
+        </main>
+    </div>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const images = document.querySelectorAll(".toggle-route-image");
+
+            images.forEach((img) => {
+                img.addEventListener("click", function () {
+                    const currentState = img.dataset.state;
+                    const fullSrc = img.dataset.full;
+                    const zoomSrc = img.dataset.zoom;
+
+                    if (currentState === "full") {
+                        img.src = zoomSrc;
+                        img.dataset.state = "zoom";
+                        img.title = "Klikkaa palataksesi koko alueen näkymään";
+                    } else {
+                        img.src = fullSrc;
+                        img.dataset.state = "full";
+                        img.title = "Klikkaa vaihtaaksesi zoomattuun näkymään";
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>
