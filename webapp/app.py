@@ -28,6 +28,7 @@ def run():
     max_attempts = int(request.form["max_attempts"])
     change_type = request.form["change_type"]
     cost_multiplier = float(request.form["cost_multiplier"])
+    event_count = int(request.form["event_count"])
 
     outputs_dir = Path("data") / "outputs"
     outputs_dir.mkdir(parents=True, exist_ok=True)
@@ -40,6 +41,7 @@ def run():
         change_type=change_type,
         cost_multiplier=cost_multiplier,
         outputs_dir=outputs_dir,
+        event_count=event_count,
     )
 
     df = pd.read_csv(result["output_path"])
@@ -56,6 +58,7 @@ def run():
         row["algorithm_slug"] = row["algorithm_name"].replace("*", "star").replace(" ", "_")
 
     result["grouped_rows"] = dict(grouped_rows)
+    result["open_scenario"] = None
 
     run_id = uuid4().hex
     result["run_id"] = run_id
@@ -88,7 +91,7 @@ def generate_scenario_routes(run_id: str, scenario_id: int):
             graph=graph,
             original_route=row["original_route"],
             final_route=row["final_traversed_route"],
-            changed_edge=row["changed_edge"],
+            changed_edges=row["all_changed_edges"],
             filename=full_filename,
             title=f"Skenaario {scenario_id} – {row['algorithm_name']}",
             zoom_to_route=False,
@@ -98,7 +101,7 @@ def generate_scenario_routes(run_id: str, scenario_id: int):
             graph=graph,
             original_route=row["original_route"],
             final_route=row["final_traversed_route"],
-            changed_edge=row["changed_edge"],
+            changed_edges=row["all_changed_edges"],
             filename=zoom_filename,
             title=f"Skenaario {scenario_id} – {row['algorithm_name']} (zoom)",
             zoom_to_route=True,

@@ -54,6 +54,15 @@
                         <input type="number" name="cost_multiplier" value="3.0" step="0.1" min="1">
                     </label>
 
+                    <label class="field-group">
+                        <span>Tiesulkujen määrä</span>
+                        <select name="event_count">
+                            <option value="1">1 (yksi muutos)</option>
+                            <option value="3" selected>3 (kohtalaisesti muutoksia)</option>
+                            <option value="5">5 (paljon muutoksia)</option>
+                        </select>
+                    </label>
+
                     <div class="button-row">
                         <button type="submit" id="submit-button">Aja kokeet</button>
                     </div>

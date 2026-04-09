@@ -56,13 +56,13 @@ class DynamicRouteSimulation:
         planner: BasePlanner,
         start_node: int,
         goal_node: int,
-        event: EdgeEvent | None = None,
+        events: list[EdgeEvent] | None = None,
     ):
         self.environment = environment
         self.planner = planner
         self.start_node = start_node
         self.goal_node = goal_node
-        self.event = event
+        self.events = events or []
 
     def _get_edge_length(self, from_node: int, to_node: int) -> float:
         """
@@ -84,15 +84,12 @@ class DynamicRouteSimulation:
 
         return min(lengths)
 
-    def _future_route_contains_event_edge(self, vehicle: VehicleState) -> bool:
+    def _future_route_contains_event_edge(self, vehicle: VehicleState, event: EdgeEvent) -> bool:
         """
         Tarkistaa, sisältääkö ajoneuvon jäljellä oleva reitti eventin kohdekaaren.
         """
-        if self.event is None:
-            return False
-
         route = vehicle.remaining_route()
-        from_node, to_node = self.event.edge
+        from_node, to_node = event.edge
 
         for i in range(len(route) - 1):
             if route[i] == from_node and route[i + 1] == to_node:
@@ -111,6 +108,9 @@ class DynamicRouteSimulation:
         failure_reason = None
         failure_category = None
         route_changed_after_event = False
+
+        first_event = self.events[0] if self.events else None
+        last_triggered_event: EdgeEvent | None = None
 
         try:
             initial_plan: PlanResult = self.planner.plan(
@@ -134,9 +134,9 @@ class DynamicRouteSimulation:
                 replanning_count=0,
                 event_triggered=False,
                 event_successfully_applied=False,
-                changed_edge=self.event.edge if self.event else None,
-                change_type=self.event.change_type if self.event else None,
-                cost_multiplier=self.event.cost_multiplier if self.event else None,
+                changed_edge=first_event.edge if first_event else None,
+                change_type=first_event.change_type if first_event else None,
+                cost_multiplier=first_event.cost_multiplier if first_event else None,
                 route_changed_after_event=False,
                 arrived=False,
                 failed=True,
@@ -158,44 +158,50 @@ class DynamicRouteSimulation:
         step_index = 0
 
         while not vehicle.has_arrived:
-            if self.event is not None and self.event.should_trigger(step_index):
-                event_triggered = True
-                self.event.mark_triggered()
+            for event in self.events:
+                if event.should_trigger(step_index):
+                    event_triggered = True
+                    event.mark_triggered()
+                    last_triggered_event = event
 
-                # Sovelletaan eventti vain jos muuttuva kaari on vielä tulevalla reitillä
-                if self._future_route_contains_event_edge(vehicle):
-                    event_successfully_applied = self.environment.apply_event(self.event)
+                    # Sovelletaan eventti vain jos muuttuva kaari on vielä tulevalla reitillä
+                    if self._future_route_contains_event_edge(vehicle, event):
+                        event_successfully_applied = self.environment.apply_event(event)
 
-                    if event_successfully_applied:
-                        if hasattr(self.planner, "apply_event_to_internal_state"):
-                            self.planner.apply_event_to_internal_state(
-                                self.environment.graph,
-                                self.event.change_type,
-                                self.event.edge,
-                                self.event.cost_multiplier,
-                            )
+                        if event_successfully_applied:
+                            if hasattr(self.planner, "apply_event_to_internal_state"):
+                                self.planner.apply_event_to_internal_state(
+                                    self.environment.graph,
+                                    event.change_type,
+                                    event.edge,
+                                    event.cost_multiplier,
+                                )
 
-                        try:
-                            old_remaining_route = vehicle.remaining_route()
+                            try:
+                                old_remaining_route = vehicle.remaining_route()
 
-                            replan_result = self.planner.replan(
-                                self.environment.graph,
-                                vehicle.current_node,
-                                self.goal_node,
-                            )
-                            if replan_result.route != old_remaining_route:
-                                route_changed_after_event = True
+                                replan_result = self.planner.replan(
+                                    self.environment.graph,
+                                    vehicle.current_node,
+                                    self.goal_node,
+                                )
 
-                            vehicle.replace_planned_route_from_current(replan_result.route)
-                            replanning_time_total += replan_result.planning_time
+                                if replan_result.route != old_remaining_route:
+                                    route_changed_after_event = True
 
-                        except nx.NetworkXNoPath:
-                            failed = True
-                            failure_reason = (
-                                "Muutoksen jälkeen uutta reittiä ei löytynyt nykyisestä sijainnista kohteeseen."
-                            )
-                            failure_category = "no_alternative_path"
-                            break
+                                vehicle.replace_planned_route_from_current(replan_result.route)
+                                replanning_time_total += replan_result.planning_time
+
+                            except nx.NetworkXNoPath:
+                                failed = True
+                                failure_reason = (
+                                    "Muutoksen jälkeen uutta reittiä ei löytynyt nykyisestä sijainnista kohteeseen."
+                                )
+                                failure_category = "no_alternative_path"
+                                break
+
+            if failed:
+                break
 
             next_node = vehicle.next_node()
             if next_node is None:
@@ -220,6 +226,8 @@ class DynamicRouteSimulation:
 
             step_index += 1
 
+        result_event = last_triggered_event if last_triggered_event is not None else first_event
+
         return SimulationResult(
             algorithm_name=self.planner.name,
             start_node=self.start_node,
@@ -235,9 +243,9 @@ class DynamicRouteSimulation:
             replanning_count=vehicle.replanning_count,
             event_triggered=event_triggered,
             event_successfully_applied=event_successfully_applied,
-            changed_edge=self.event.edge if self.event else None,
-            change_type=self.event.change_type if self.event else None,
-            cost_multiplier=self.event.cost_multiplier if self.event else None,
+            changed_edge=result_event.edge if result_event else None,
+            change_type=result_event.change_type if result_event else None,
+            cost_multiplier=result_event.cost_multiplier if result_event else None,
             route_changed_after_event=route_changed_after_event,
             arrived=vehicle.has_arrived,
             failed=failed,

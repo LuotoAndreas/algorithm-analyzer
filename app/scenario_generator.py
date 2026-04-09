@@ -7,6 +7,7 @@ import networkx as nx
 from app.events import EdgeEvent
 from app.planners import BasePlanner
 
+
 @dataclass
 class Scenario:
     """
@@ -14,7 +15,7 @@ class Scenario:
     """
     start_node: int
     goal_node: int
-    event: EdgeEvent
+    events: list[EdgeEvent]
     original_routes: dict[str, list[int]]
 
 
@@ -60,16 +61,6 @@ def find_edge_index(route: list[int], edge: tuple[int, int]) -> int | None:
 def choose_event_step(edge_index: int, rng: random.Random) -> int | None:
     """
     Valitsee simulaatioaskeleen, jolla tapahtuma laukaistaan ennen muuttuvaa tieosuutta.
-
-    Jos muuttuva tieosuus on route[i] -> route[i+1], event_step pitää olla korkeintaan i-1,
-    jotta kaari ei ole vielä ajettu.
-
-    Esimerkiksi:
-        route = [A, B, C, D]
-        edge_index = 2 tarkoittaa kaarta C -> D
-        silloin eventti voidaan laukaista stepissä 0 tai 1 tai 2 ennen kuin C->D ajetaan
-
-    Tässä vältetään kaikkein ensimmäinen hetki, jos mahdollista.
     """
     if edge_index < 1:
         return None
@@ -97,6 +88,54 @@ def generate_random_node_pair(graph: nx.MultiDiGraph, rng: random.Random) -> tup
             return start_node, goal_node
 
 
+def select_multiple_events(
+    candidate_edges: list[tuple[tuple[int, int], int, int]],
+    event_count: int,
+    change_type: str,
+    cost_multiplier: float,
+    min_index_gap: int = 2,
+) -> list[EdgeEvent]:
+    """
+    Valitsee useita tapahtumia samalta alkuperäiseltä reitiltä.
+
+    candidate_edges sisältää kolmikoita:
+    - edge
+    - edge_index
+    - event_step
+
+    Valinta tehdään reitin järjestyksessä siten, että tapahtumat eivät ole liian lähellä toisiaan.
+    """
+    if not candidate_edges or event_count <= 0:
+        return []
+
+    # Järjestetään reitin etenemisjärjestykseen
+    sorted_candidates = sorted(candidate_edges, key=lambda item: item[1])
+
+    selected: list[tuple[tuple[int, int], int, int]] = []
+    last_selected_index: int | None = None
+
+    for edge, edge_index, event_step in sorted_candidates:
+        if last_selected_index is None or (edge_index - last_selected_index) >= min_index_gap:
+            selected.append((edge, edge_index, event_step))
+            last_selected_index = edge_index
+
+        if len(selected) >= event_count:
+            break
+
+    events: list[EdgeEvent] = []
+    for edge, _edge_index, event_step in selected:
+        events.append(
+            EdgeEvent(
+                event_step=event_step,
+                edge=edge,
+                change_type=change_type,
+                cost_multiplier=cost_multiplier if change_type == "increase_cost" else None,
+            )
+        )
+
+    return events
+
+
 def generate_scenario(
     graph: nx.MultiDiGraph,
     planners: list[BasePlanner],
@@ -104,6 +143,7 @@ def generate_scenario(
     change_type: str = "remove",
     cost_multiplier: float = 3.0,
     max_pair_attempts: int = 100,
+    event_count: int = 1,
 ) -> Scenario | None:
     """
     Generoi yhden reilun skenaarion kaikille algoritmeille.
@@ -154,19 +194,21 @@ def generate_scenario(
         if not candidate_edges:
             continue
 
-        selected_edge, selected_edge_index, event_step = rng.choice(candidate_edges)
-
-        event = EdgeEvent(
-            event_step=event_step,
-            edge=selected_edge,
+        events = select_multiple_events(
+            candidate_edges=candidate_edges,
+            event_count=event_count,
             change_type=change_type,
-            cost_multiplier=cost_multiplier if change_type == "increase_cost" else None,
+            cost_multiplier=cost_multiplier,
+            min_index_gap=2,
         )
+
+        if len(events) < event_count:
+            continue
 
         return Scenario(
             start_node=start_node,
             goal_node=goal_node,
-            event=event,
+            events=events,
             original_routes=original_routes,
         )
 

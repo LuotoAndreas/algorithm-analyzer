@@ -24,17 +24,35 @@ def _parse_route(value) -> list[int]:
     return []
 
 
-def _parse_edge(value) -> tuple[int, int] | None:
+def _parse_edges(value) -> list[tuple[int, int]]:
     if value is None:
-        return None
-    if isinstance(value, tuple):
-        return value
+        return []
+
+    if isinstance(value, list):
+        parsed_edges = []
+        for item in value:
+            if isinstance(item, tuple) and len(item) == 2:
+                parsed_edges.append(item)
+            elif isinstance(item, list) and len(item) == 2:
+                parsed_edges.append((item[0], item[1]))
+            elif isinstance(item, str):
+                parsed = ast.literal_eval(item)
+                if isinstance(parsed, tuple) and len(parsed) == 2:
+                    parsed_edges.append(parsed)
+        return parsed_edges
+
     if isinstance(value, str):
         parsed = ast.literal_eval(value)
-        if isinstance(parsed, tuple) and len(parsed) == 2:
-            return parsed
-    return None
+        if isinstance(parsed, list):
+            parsed_edges = []
+            for item in parsed:
+                if isinstance(item, tuple) and len(item) == 2:
+                    parsed_edges.append(item)
+                elif isinstance(item, list) and len(item) == 2:
+                    parsed_edges.append((item[0], item[1]))
+            return parsed_edges
 
+    return []
 
 def _set_route_view(ax, graph, routes: list[list[int]], padding_ratio: float = 0.15) -> None:
     node_ids = []
@@ -181,16 +199,16 @@ def plot_scenario_route(
     graph,
     original_route,
     final_route,
-    changed_edge,
+    changed_edges,
     filename: str,
     title: str | None = None,
     zoom_to_route: bool = False,
-) -> str:
+) -> str: 
     ensure_dir()
 
     original_route = _parse_route(original_route)
     final_route = _parse_route(final_route)
-    changed_edge = _parse_edge(changed_edge)
+    changed_edges = _parse_edges(changed_edges)
 
     fig, ax = ox.plot_graph(
         graph,
@@ -215,10 +233,12 @@ def plot_scenario_route(
             close=False,
         )
 
+    primary_changed_edge = changed_edges[0] if changed_edges else None
+    
     changed_segment = _extract_changed_segment(
         original_route,
         final_route,
-        changed_edge,
+        primary_changed_edge,
     )
 
     if changed_segment:
@@ -234,9 +254,9 @@ def plot_scenario_route(
             close=False,
         )
 
-    if changed_edge is not None:
-        from_node, to_node = changed_edge
+    closed_edge_label_added = False
 
+    for from_node, to_node in changed_edges:
         if from_node in graph.nodes and to_node in graph.nodes:
             x1 = graph.nodes[from_node]["x"]
             y1 = graph.nodes[from_node]["y"]
@@ -250,8 +270,9 @@ def plot_scenario_route(
                 linestyle="-",
                 color="black",
                 zorder=5,
-                label="Muutettu tieosuus",
+                label="Suljettu tieosuus" if not closed_edge_label_added else None,
             )
+            closed_edge_label_added = True
 
     if original_route:
         start_node = original_route[0]

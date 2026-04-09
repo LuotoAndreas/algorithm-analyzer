@@ -32,6 +32,7 @@ def run_experiment(
     change_type: str,
     cost_multiplier: float,
     outputs_dir: Path,
+    event_count: int = 1,
 ) -> dict:
     rng = random.Random(seed)
 
@@ -52,6 +53,7 @@ def run_experiment(
             rng=rng,
             change_type=change_type,
             cost_multiplier=cost_multiplier,
+            event_count=event_count,
         )
 
         if scenario is None:
@@ -62,19 +64,22 @@ def run_experiment(
         for planner in get_default_planners():
             environment = RoadEnvironment(graph)
 
-            event_copy = EdgeEvent(
-                event_step=scenario.event.event_step,
-                edge=scenario.event.edge,
-                change_type=scenario.event.change_type,
-                cost_multiplier=scenario.event.cost_multiplier,
-            )
+            event_copies = [
+                EdgeEvent(
+                    event_step=event.event_step,
+                    edge=event.edge,
+                    change_type=event.change_type,
+                    cost_multiplier=event.cost_multiplier,
+                )
+                for event in scenario.events
+            ]
 
             simulation = DynamicRouteSimulation(
                 environment=environment,
                 planner=planner,
                 start_node=scenario.start_node,
                 goal_node=scenario.goal_node,
-                event=event_copy,
+                events=event_copies,
             )
 
             simulation_result = simulation.run()
@@ -108,6 +113,7 @@ def run_experiment(
         "max_attempts": max_attempts,
         "change_type": change_type,
         "cost_multiplier": cost_multiplier,
+        "event_count": event_count,
         "accepted_scenarios": accepted_scenarios,
         "rows": rows,
         "summary": summary,

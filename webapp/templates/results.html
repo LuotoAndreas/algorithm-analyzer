@@ -7,7 +7,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-    <div class="page-shell">
+    <div class="page-shell">                
+        <section class="card">
+            <a class="back-link" href="/">← Takaisin etusivulle</a>
+        </section>
         <header class="page-header">
             <p class="eyebrow">Tulokset</p>
             <h1>Dynaamisen reitinhaun analyysi</h1>
@@ -26,6 +29,7 @@
                     <div class="info-item"><strong>Maksimiyritykset</strong><span>{{ result.max_attempts }}</span></div>
                     <div class="info-item"><strong>Muutostyyppi</strong><span>{{ result.change_type }}</span></div>
                     <div class="info-item"><strong>Kustannuskerroin</strong><span>{{ result.cost_multiplier }}</span></div>
+                    <div class="info-item"><strong>Tiesulkujen määrä</strong><span>{{ result.event_count }}</span></div>
                     <div class="info-item"><strong>Hyväksyttyjä skenaarioita</strong><span>{{ result.accepted_scenarios }}</span></div>
                     <div class="info-item info-item-wide"><strong>Tallennettu tiedosto</strong><span>{{ result.output_path }}</span></div>
                 </div>
@@ -149,7 +153,7 @@
                     >
                         <summary>
                             <span><strong>Skenaario {{ scenario_id }}</strong></span>
-                            <span>{{ scenario_rows|length }} algoritmia</span>
+                            <span>{{ scenario_rows|length }} algoritmia · {{ scenario_rows[0]["event_count"] }} muutosta</span>
                         </summary>
 
                         <div class="scenario-content">
@@ -212,6 +216,13 @@
                                                 <div class="info-item info-item-wide">
                                                     <strong>Epäonnistumisen kategoria</strong>
                                                     <span>{{ row["failure_category"] if row["failure_category"] else "Ei määritelty" }}</span>
+                                                </div>
+                                            {% endif %}
+
+                                            {% if row["event_steps"] %}
+                                                <div class="info-item info-item-wide">
+                                                    <strong>Tapahtuma-askeleet</strong>
+                                                    <span>{{ row["event_steps"] }}</span>
                                                 </div>
                                             {% endif %}
                                         </div>

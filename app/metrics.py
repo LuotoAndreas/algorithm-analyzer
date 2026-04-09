@@ -51,6 +51,8 @@ def build_result_row(
     """
     Muuntaa yhden simulaation tuloksen yhdeksi tallennettavaksi riviksi.
     """
+    first_event = scenario.events[0] if scenario.events else None
+
     original_route_node_count = len(simulation_result.original_route)
     original_route_edge_count = max(0, original_route_node_count - 1)
 
@@ -87,7 +89,10 @@ def build_result_row(
 
         "change_type": simulation_result.change_type,
         "changed_edge": simulation_result.changed_edge,
-        "event_step": scenario.event.event_step,
+        "event_step": first_event.event_step if first_event else None,
+        "event_count": len(scenario.events),
+        "event_steps": [event.event_step for event in scenario.events],
+        "all_changed_edges": [event.edge for event in scenario.events],
         "event_triggered": simulation_result.event_triggered,
         "event_successfully_applied": simulation_result.event_successfully_applied,
         "cost_multiplier": simulation_result.cost_multiplier,
