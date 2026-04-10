@@ -57,6 +57,7 @@ def find_edge_index(route: list[int], edge: tuple[int, int]) -> int | None:
 
     return None
 
+
 def calculate_event_time_for_edge(
     graph: nx.MultiDiGraph,
     route: list[int],
@@ -65,10 +66,6 @@ def calculate_event_time_for_edge(
 ) -> float | None:
     """
     Laskee tapahtumalle ajan sekunteina ennen valittua tieosuutta.
-
-    Aika muodostetaan kumulatiivisena travel_time-summana reitin alusta.
-    Tapahtuma sijoitetaan hieman ennen kyseistä kaarta, jotta muutos ehtii
-    tapahtua ajon aikana ennen kuin ajoneuvo saapuu esteelle.
     """
     if edge_index < 1:
         return None
@@ -94,10 +91,8 @@ def calculate_event_time_for_edge(
 
         cumulative_time += min(travel_times)
 
-    # Laukaistaan tapahtuma hieman ennen kyseistä tieosuutta.
-    # Käytetään pientä satunnaista kerrointa, jotta tapahtuma ei ole aina täsmälleen
-    # samalla hetkellä.
     return cumulative_time * rng.uniform(0.6, 0.95)
+
 
 def choose_event_step(edge_index: int, rng: random.Random) -> int | None:
     """
@@ -129,42 +124,104 @@ def generate_random_node_pair(graph: nx.MultiDiGraph, rng: random.Random) -> tup
             return start_node, goal_node
 
 
+def _build_target_edge_indices(
+    min_edge_index: int,
+    max_edge_index: int,
+    event_count: int,
+) -> list[int]:
+    """
+    Rakentaa tavoiteindeksit reitin eri kohtiin siten, että tapahtumat jakautuvat reitin pituudelle.
+    """
+    if event_count <= 0:
+        return []
+
+    if min_edge_index > max_edge_index:
+        return []
+
+    if event_count == 1:
+        return [round((min_edge_index + max_edge_index) / 2)]
+
+    span = max_edge_index - min_edge_index
+    targets = []
+
+    for i in range(event_count):
+        ratio = (i + 1) / (event_count + 1)
+        target = min_edge_index + round(span * ratio)
+        targets.append(target)
+
+    return targets
+
+
 def select_multiple_events(
     candidate_edges: list[tuple[tuple[int, int], int, int, float]],
     event_count: int,
     change_type: str,
     cost_multiplier: float,
+    rng: random.Random,
     min_index_gap: int = 2,
 ) -> list[EdgeEvent]:
     """
     Valitsee useita tapahtumia samalta alkuperäiseltä reitiltä.
-
-    candidate_edges sisältää nelikoita:
-    - edge
-    - edge_index
-    - event_step
-    - event_time
-
-    Valinta tehdään reitin järjestyksessä siten, että tapahtumat eivät ole liian lähellä toisiaan.
     """
     if not candidate_edges or event_count <= 0:
         return []
 
     sorted_candidates = sorted(candidate_edges, key=lambda item: item[1])
 
+    candidate_indices = [edge_index for _, edge_index, _, _ in sorted_candidates]
+    min_edge_index = candidate_indices[0]
+    max_edge_index = candidate_indices[-1]
+
+    target_indices = _build_target_edge_indices(
+        min_edge_index=min_edge_index,
+        max_edge_index=max_edge_index,
+        event_count=event_count,
+    )
+
     selected: list[tuple[tuple[int, int], int, int, float]] = []
-    last_selected_index: int | None = None
 
-    for edge, edge_index, event_step, event_time in sorted_candidates:
-        if last_selected_index is None or (edge_index - last_selected_index) >= min_index_gap:
-            selected.append((edge, edge_index, event_step, event_time))
-            last_selected_index = edge_index
+    for target_index in target_indices:
+        available = []
 
-        if len(selected) >= event_count:
-            break
+        for candidate in sorted_candidates:
+            edge, edge_index, event_step, event_time = candidate
+
+            too_close = any(abs(edge_index - chosen_index) < min_index_gap for _, chosen_index, _, _ in selected)
+            if too_close:
+                continue
+
+            distance_to_target = abs(edge_index - target_index)
+            tie_breaker = rng.random()
+
+            available.append((distance_to_target, tie_breaker, candidate))
+
+        if not available:
+            continue
+
+        available.sort(key=lambda item: (item[0], item[1]))
+        chosen_candidate = available[0][2]
+        selected.append(chosen_candidate)
+
+    if len(selected) < event_count:
+        for candidate in sorted_candidates:
+            if candidate in selected:
+                continue
+
+            edge, edge_index, event_step, event_time = candidate
+
+            too_close = any(abs(edge_index - chosen_index) < min_index_gap for _, chosen_index, _, _ in selected)
+            if too_close:
+                continue
+
+            selected.append(candidate)
+
+            if len(selected) >= event_count:
+                break
+
+    selected.sort(key=lambda item: item[1])
 
     events: list[EdgeEvent] = []
-    for edge, _edge_index, event_step, event_time in selected:
+    for edge, _edge_index, event_step, event_time in selected[:event_count]:
         events.append(
             EdgeEvent(
                 event_step=event_step,
@@ -176,6 +233,74 @@ def select_multiple_events(
         )
 
     return events
+
+
+def _event_current_node_from_route(route: list[int], event_step: int | None) -> int | None:
+    """
+    Palauttaa solmun, jossa ajoneuvon oletetaan olevan eventin lauetessa askelpohjaisessa mallissa.
+    """
+    if not route:
+        return None
+
+    if event_step is None:
+        return None
+
+    if event_step < 0:
+        return route[0]
+
+    if event_step >= len(route):
+        return route[-1]
+
+    return route[event_step]
+
+
+def _remove_edge_from_graph_copy(
+    graph: nx.MultiDiGraph,
+    edge: tuple[int, int],
+) -> nx.MultiDiGraph:
+    """
+    Palauttaa graafikopion, josta annettu suunnattu kaari on poistettu.
+    """
+    copied = graph.copy()
+    u, v = edge
+
+    if copied.has_edge(u, v):
+        for key in list(copied[u][v].keys()):
+            copied.remove_edge(u, v, key)
+
+    return copied
+
+
+def _has_alternative_path_after_remove(
+    graph: nx.MultiDiGraph,
+    route: list[int],
+    goal_node: int,
+    event: EdgeEvent,
+) -> bool:
+    """
+    Tarkistaa, löytyykö remove-tapahtuman jälkeen edelleen vaihtoehtoinen reitti
+    siitä solmusta, jossa ajoneuvo olisi tapahtuman lauetessa.
+
+    Jos ei löydy, skenaario hylätään.
+    """
+    current_node = _event_current_node_from_route(route, event.event_step)
+    if current_node is None:
+        return False
+
+    modified_graph = _remove_edge_from_graph_copy(graph, event.edge)
+
+    try:
+        nx.shortest_path(
+            modified_graph,
+            source=current_node,
+            target=goal_node,
+            weight="travel_time",
+            method="dijkstra",
+        )
+        return True
+    except nx.NetworkXNoPath:
+        return False
+
 
 def generate_scenario(
     graph: nx.MultiDiGraph,
@@ -193,6 +318,8 @@ def generate_scenario(
     - kaikille algoritmeille löytyy alkuperäinen reitti
     - reiteillä on vähintään yksi yhteinen kaari
     - eventille voidaan valita askel ennen muuttuvaa tieosuutta
+    - remove-tapauksessa ensimmäisen tapahtuman jälkeen pitää löytyä
+      vaihtoehtoinen reitti, jotta kyse ei ole vain täydellisestä katkeamisesta
     """
     for _ in range(max_pair_attempts):
         start_node, goal_node = generate_random_node_pair(graph, rng)
@@ -219,7 +346,6 @@ def generate_scenario(
         if not common_edges:
             continue
 
-        # Käytetään ensimmäisen plannerin reittiä indeksien tarkistukseen.
         reference_route = next(iter(original_routes.values()))
 
         candidate_edges = []
@@ -242,11 +368,25 @@ def generate_scenario(
             event_count=event_count,
             change_type=change_type,
             cost_multiplier=cost_multiplier,
+            rng=rng,
             min_index_gap=2,
         )
 
         if len(events) < event_count:
             continue
+
+        # Tärkeä suodatus:
+        # remove-skenaariot hyväksytään vain, jos ensimmäisen tapahtuman jälkeen
+        # löytyy edelleen vaihtoehtoinen reitti.
+        if change_type == "remove":
+            first_event = events[0]
+            if not _has_alternative_path_after_remove(
+                graph=graph,
+                route=reference_route,
+                goal_node=goal_node,
+                event=first_event,
+            ):
+                continue
 
         return Scenario(
             start_node=start_node,

@@ -43,3 +43,6 @@ webapp/static/plots/
 
 # cache
 cache/
+
+# Interactive maps
+webapp/static/interactive_maps/

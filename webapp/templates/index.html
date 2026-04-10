@@ -43,15 +43,22 @@
 
                     <label class="field-group">
                         <span>Muutostyyppi</span>
-                        <select name="change_type">
+                        <select name="change_type" id="change_type">
                             <option value="remove">remove</option>
                             <option value="increase_cost">increase_cost</option>
                         </select>
                     </label>
 
-                    <label class="field-group">
+                    <label class="field-group" id="cost-multiplier-group">
                         <span>Kustannuskerroin</span>
-                        <input type="number" name="cost_multiplier" value="3.0" step="0.1" min="1">
+                        <input
+                            type="number"
+                            name="cost_multiplier"
+                            id="cost_multiplier"
+                            value="3.0"
+                            step="0.1"
+                            min="1"
+                        >
                     </label>
 
                     <label class="field-group">
@@ -84,6 +91,19 @@
             const form = document.getElementById("experiment-form");
             const overlay = document.getElementById("loading-overlay");
             const submitButton = document.getElementById("submit-button");
+
+            const changeTypeSelect = document.getElementById("change_type");
+            const costGroup = document.getElementById("cost-multiplier-group");
+            const costInput = document.getElementById("cost_multiplier");
+
+            function updateCostMultiplierVisibility() {
+                const showCost = changeTypeSelect.value === "increase_cost";
+                costGroup.style.display = showCost ? "" : "none";
+                costInput.disabled = !showCost;
+            }
+
+            changeTypeSelect.addEventListener("change", updateCostMultiplierVisibility);
+            updateCostMultiplierVisibility();
 
             form.addEventListener("submit", function () {
                 overlay.classList.remove("hidden");
