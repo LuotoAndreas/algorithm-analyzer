@@ -38,7 +38,7 @@ class DStarLiteCore:
     """
 
     def __init__(self, graph: nx.MultiDiGraph, start: int, goal: int):
-        self.graph = graph.copy()
+        self.graph = graph
         self.start = start
         self.goal = goal
 
@@ -46,17 +46,16 @@ class DStarLiteCore:
         self.g: dict[int, float] = {}
         self.rhs: dict[int, float] = {}
         self.queue: list[tuple[float, float, int]] = []
+        self.entry_finder: dict[int, tuple[float, float]] = {}
 
         self.initialized = False
-
-        # Heuristiikan turvallinen ylänopeus metreinä sekunnissa.
-        # 130 km/h ≈ 36.11 m/s
-        self.max_speed_mps = 130 / 3.6
+        self.max_speed_mps = graph.graph.get("max_speed_mps", 200.0 / 3.6)
 
     def initialize(self) -> None:
         self.g = {node: INF for node in self.graph.nodes}
         self.rhs = {node: INF for node in self.graph.nodes}
         self.queue = []
+        self.entry_finder = {}
         self.km = 0.0
 
         self.rhs[self.goal] = 0.0
@@ -84,9 +83,6 @@ class DStarLiteCore:
     def heuristic(self, node_a: int, node_b: int) -> float:
         """
         Heuristiikka sekunteina.
-
-        Muunnetaan linnuntie-etäisyys ajaksi jakamalla turvallisella
-        maksimi-nopeudella, jotta heuristiikka pysyy optimistisena.
         """
         distance_m = haversine_distance(self.graph, node_a, node_b)
         return distance_m / self.max_speed_mps
@@ -127,13 +123,15 @@ class DStarLiteCore:
         )
 
     def _push(self, node: int, key: tuple[float, float]) -> None:
+        self.entry_finder[node] = key
         heapq.heappush(self.queue, (key[0], key[1], node))
 
     def _top_key(self) -> tuple[float, float]:
         while self.queue:
             k1, k2, node = self.queue[0]
+            current_key = self.entry_finder.get(node)
 
-            if self.g[node] == self.rhs[node]:
+            if current_key is None or current_key != (k1, k2):
                 heapq.heappop(self.queue)
                 continue
 
@@ -144,10 +142,12 @@ class DStarLiteCore:
     def _pop(self) -> tuple[tuple[float, float], int] | None:
         while self.queue:
             k1, k2, node = heapq.heappop(self.queue)
+            current_key = self.entry_finder.get(node)
 
-            if self.g[node] == self.rhs[node]:
+            if current_key is None or current_key != (k1, k2):
                 continue
 
+            del self.entry_finder[node]
             return ((k1, k2), node)
 
         return None
@@ -250,40 +250,28 @@ class DStarLiteCore:
             total += self.edge_cost(path[i], path[i + 1])
         return total
 
-    def remove_edge(self, u: int, v: int) -> bool:
-        changed = False
+    def notify_edge_removed(self, u: int, v: int) -> bool:
+        """
+        Ilmoittaa D* Litelle, että kaari u->v on jo poistettu ympäristön graafista.
+        Päivittää vain sisäisen tilan, ei muuta graafia enää itse.
+        """
+        affected_nodes = {u}
+        affected_nodes.update(self.predecessors(u))
 
-        if self.graph.has_edge(u, v):
-            edge_keys = list(self.graph[u][v].keys())
-            for key in edge_keys:
-                self.graph.remove_edge(u, v, key)
-                changed = True
+        for node in affected_nodes:
+            self.update_vertex(node)
 
-        if changed:
-            affected_nodes = {u, v}
-            affected_nodes.update(self.predecessors(u))
-            affected_nodes.update(self.predecessors(v))
+        return True
 
-            for node in affected_nodes:
-                self.update_vertex(node)
+    def notify_edge_cost_changed(self, u: int, v: int) -> bool:
+        """
+        Ilmoittaa D* Litelle, että kaaren u->v kustannus on jo muuttunut
+        ympäristön graafissa. Päivittää vain sisäisen tilan.
+        """
+        affected_nodes = {u}
+        affected_nodes.update(self.predecessors(u))
 
-        return changed
+        for node in affected_nodes:
+            self.update_vertex(node)
 
-    def increase_edge_cost(self, u: int, v: int, multiplier: float) -> bool:
-        changed = False
-
-        if self.graph.has_edge(u, v):
-            for _, edge_data in self.graph[u][v].items():
-                if "travel_time" in edge_data:
-                    edge_data["travel_time"] *= multiplier
-                    changed = True
-
-        if changed:
-            affected_nodes = {u, v}
-            affected_nodes.update(self.predecessors(u))
-            affected_nodes.update(self.predecessors(v))
-
-            for node in affected_nodes:
-                self.update_vertex(node)
-
-        return changed
+        return True

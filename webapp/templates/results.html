@@ -114,6 +114,7 @@
                                 <th>Kokonaislaskenta-aika (s)</th>
                                 <th>Epäonnistumisen syy</th>
                                 <th>Kategoria</th>
+                                <th>Solmu jossa epäonnistui</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -135,6 +136,7 @@
                                     <td>{{ "%.6f"|format(row["total_planning_time"]) if row["total_planning_time"] is not none else "N/A" }}</td>
                                     <td>{{ row["failure_reason"] if row["failure_reason"] else "-" }}</td>
                                     <td>{{ row["failure_category"] if row["failure_category"] else "-" }}</td>
+                                    <td>{{ row["failure_node"] if row["failure_node"] is not none else "-" }}</td>
                                 </tr>
                             {% endfor %}
                         </tbody>
@@ -248,6 +250,7 @@
                                                     {{ "%.6f"|format(row["total_planning_time"]) if row["total_planning_time"] is not none else "N/A" }}
                                                 </span>
                                             </div>
+
                                             {% if row["failed"] %}
                                                 <div class="info-item info-item-wide">
                                                     <strong>Epäonnistumisen syy</strong>
@@ -258,6 +261,11 @@
                                                     <strong>Epäonnistumisen kategoria</strong>
                                                     <span>{{ row["failure_category"] if row["failure_category"] else "Ei määritelty" }}</span>
                                                 </div>
+
+                                                <div class="info-item info-item-wide">
+                                                    <strong>Solmu jossa epäonnistui</strong>
+                                                    <span>{{ row["failure_node"] if row["failure_node"] is not none else "-" }}</span>
+                                                </div>
                                             {% endif %}
 
                                             {% if row["event_steps"] %}
@@ -267,6 +275,33 @@
                                                 </div>
                                             {% endif %}
                                         </div>
+
+                                        {% if row["event_log"] %}
+                                            <div class="event-log-block">
+                                                <h4>Eventtiloki</h4>
+                                                {% for event in row["event_log"] %}
+                                                    <div class="event-log-entry" style="margin-top: 0.75rem; padding: 0.75rem; border: 1px solid #ddd; border-radius: 8px;">
+                                                        <div><strong>Muuttunut kaari:</strong> {{ event["edge"] }}</div>
+                                                        <div><strong>Laukaisun askel:</strong> {{ event["trigger_step"] }}</div>
+                                                        <div><strong>Laukaisun aika (s):</strong> {{ event["trigger_time"] }}</div>
+                                                        <div><strong>Ajoneuvon nykyinen solmu:</strong> {{ event["current_node"] }}</div>
+                                                        <div><strong>Sovellettiinko verkkoon:</strong> {{ "Kyllä" if event["applied_to_graph"] else "Ei" }}</div>
+                                                        <div><strong>Vaikuttiko tulevaan reittiin:</strong> {{ "Kyllä" if event["affected_future_route"] else "Ei" }}</div>
+                                                        <div><strong>Yritettiinkö uudelleenreititystä:</strong> {{ "Kyllä" if event["replan_attempted"] else "Ei" }}</div>
+                                                        <div>
+                                                            <strong>Uudelleenreititys onnistui:</strong>
+                                                            {% if event["replan_success"] is sameas true %}
+                                                                Kyllä
+                                                            {% elif event["replan_success"] is sameas false %}
+                                                                Ei
+                                                            {% else %}
+                                                                -
+                                                            {% endif %}
+                                                        </div>
+                                                    </div>
+                                                {% endfor %}
+                                            </div>
+                                        {% endif %}
 
                                         {% if row["route_image_full"] %}
                                             <img

@@ -44,6 +44,14 @@ def haversine_distance(graph: nx.MultiDiGraph, node_a: int, node_b: int) -> floa
     return earth_radius_m * c
 
 
+def time_heuristic(graph: nx.MultiDiGraph, node_a: int, node_b: int) -> float:
+    """
+    Heuristiikka sekunteina travel_time-painotukselle.
+    """
+    max_speed_mps = graph.graph.get("max_speed_mps", 200.0 / 3.6)
+    return haversine_distance(graph, node_a, node_b) / max_speed_mps
+
+
 class BasePlanner(ABC):
     """
     Yhteinen rajapinta kaikille reitinsuunnittelijoille.
@@ -112,7 +120,7 @@ class AStarPlanner(BasePlanner):
             graph,
             start_node,
             goal_node,
-            heuristic=lambda a, b: haversine_distance(graph, a, b),
+            heuristic=lambda a, b: time_heuristic(graph, a, b),
             weight="travel_time",
         )
         travel_time = nx.path_weight(graph, route, weight="travel_time")
@@ -207,12 +215,12 @@ class DStarLitePlanner(BasePlanner):
         u, v = edge
 
         if change_type == "remove":
-            return self.core.remove_edge(u, v)
+            return self.core.notify_edge_removed(u, v)
 
         if change_type == "increase_cost":
             if cost_multiplier is None:
                 raise ValueError("increase_cost vaatii cost_multiplier-arvon.")
-            return self.core.increase_edge_cost(u, v, cost_multiplier)
+            return self.core.notify_edge_cost_changed(u, v)
 
         raise ValueError(f"Tuntematon change_type: {change_type}")
 

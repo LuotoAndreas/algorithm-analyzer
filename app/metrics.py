@@ -137,6 +137,9 @@ def build_result_row(
         "failed": simulation_result.failed,
         "failure_reason": simulation_result.failure_reason,
         "failure_category": simulation_result.failure_category,
+        "failure_node": simulation_result.failure_node,
+
+        "event_log": simulation_result.event_log,
 
         "original_route": simulation_result.original_route,
         "final_traversed_route": simulation_result.final_traversed_route,

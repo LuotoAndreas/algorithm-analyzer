@@ -46,6 +46,9 @@ class SimulationResult:
     failed: bool
     failure_reason: str | None
     failure_category: str | None
+    failure_node: int | None
+
+    event_log: list[dict]
 
 
 class DynamicRouteSimulation:
@@ -67,45 +70,57 @@ class DynamicRouteSimulation:
         self.goal_node = goal_node
         self.events = events or []
 
-    def _get_edge_length(self, from_node: int, to_node: int) -> float:
+    def _get_best_edge_data(self, from_node: int, to_node: int) -> dict:
         """
-        Palauttaa kaaren pienimmän length-kustannuksen.
+        Valitsee kaaren samalla logiikalla kuin reitinhaku:
+        pienin travel_time voittaa. Sekä length että travel_time
+        luetaan samasta fyysisestä kaaresta.
         """
         edge_data = self.environment.graph.get_edge_data(from_node, to_node)
 
         if edge_data is None:
             raise ValueError(f"Kaarta {from_node} -> {to_node} ei löytynyt ympäristöstä.")
 
-        lengths = []
-        for _, data in edge_data.items():
-            length = data.get("length")
-            if length is not None:
-                lengths.append(length)
+        best_data = None
+        best_time = float("inf")
 
-        if not lengths:
+        for _, data in edge_data.items():
+            travel_time = data.get("travel_time")
+            if travel_time is None:
+                continue
+
+            if travel_time < best_time:
+                best_time = travel_time
+                best_data = data
+
+        if best_data is None:
+            raise ValueError(f"Kaaren {from_node} -> {to_node} travel_time-arvo puuttuu.")
+
+        return best_data
+
+    def _get_edge_length(self, from_node: int, to_node: int) -> float:
+        """
+        Palauttaa valitun kaaren length-kustannuksen.
+        """
+        best_data = self._get_best_edge_data(from_node, to_node)
+        length = best_data.get("length")
+
+        if length is None:
             raise ValueError(f"Kaaren {from_node} -> {to_node} length-arvo puuttuu.")
 
-        return min(lengths)
+        return float(length)
 
     def _get_edge_travel_time(self, from_node: int, to_node: int) -> float:
         """
-        Palauttaa kaaren pienimmän travel_time-kustannuksen sekunteina.
+        Palauttaa valitun kaaren travel_time-kustannuksen sekunteina.
         """
-        edge_data = self.environment.graph.get_edge_data(from_node, to_node)
+        best_data = self._get_best_edge_data(from_node, to_node)
+        travel_time = best_data.get("travel_time")
 
-        if edge_data is None:
-            raise ValueError(f"Kaarta {from_node} -> {to_node} ei löytynyt ympäristöstä.")
-
-        travel_times = []
-        for _, data in edge_data.items():
-            travel_time = data.get("travel_time")
-            if travel_time is not None:
-                travel_times.append(travel_time)
-
-        if not travel_times:
+        if travel_time is None:
             raise ValueError(f"Kaaren {from_node} -> {to_node} travel_time-arvo puuttuu.")
 
-        return min(travel_times)
+        return float(travel_time)
 
     def _future_route_contains_event_edge(self, vehicle: VehicleState, event: EdgeEvent) -> bool:
         """
@@ -148,16 +163,22 @@ class DynamicRouteSimulation:
             if edge_data is None:
                 return None
 
-            travel_times = []
+            best_data = None
+            best_time = float("inf")
+
             for _, data in edge_data.items():
                 travel_time = data.get("travel_time")
-                if travel_time is not None:
-                    travel_times.append(travel_time)
+                if travel_time is None:
+                    continue
 
-            if not travel_times:
+                if travel_time < best_time:
+                    best_time = travel_time
+                    best_data = data
+
+            if best_data is None:
                 return None
 
-            total_time += min(travel_times)
+            total_time += float(best_data["travel_time"])
 
         return total_time
 
@@ -175,9 +196,6 @@ class DynamicRouteSimulation:
 
         temp_graph = self.environment.graph.copy()
 
-        # Tärkeää: baseline-simulaatiossa ei saa käyttää event.triggered-tilaa,
-        # koska se sotkisi varsinaisen simulaation. Siksi pidetään paikallisesti
-        # kirjaa jo sovelletuista tapahtumista.
         applied_event_indices: set[int] = set()
 
         for i in range(len(original_route) - 1):
@@ -220,16 +238,22 @@ class DynamicRouteSimulation:
             if edge_data is None:
                 return None
 
-            travel_times = []
+            best_data = None
+            best_time = float("inf")
+
             for _, data in edge_data.items():
                 travel_time = data.get("travel_time")
-                if travel_time is not None:
-                    travel_times.append(travel_time)
+                if travel_time is None:
+                    continue
 
-            if not travel_times:
+                if travel_time < best_time:
+                    best_time = travel_time
+                    best_data = data
+
+            if best_data is None:
                 return None
 
-            total_time += min(travel_times)
+            total_time += float(best_data["travel_time"])
             step_index += 1
 
         return total_time
@@ -246,6 +270,7 @@ class DynamicRouteSimulation:
         failure_category = None
         route_changed_after_event = False
         original_route_travel_time_with_events = None
+        event_log: list[dict] = []
 
         first_event = self.events[0] if self.events else None
         last_triggered_event: EdgeEvent | None = None
@@ -283,6 +308,8 @@ class DynamicRouteSimulation:
                 failed=True,
                 failure_reason="Alkuperäistä reittiä ei löytynyt.",
                 failure_category="no_initial_path",
+                failure_node=None,
+                event_log=[],
             )
 
         vehicle = VehicleState(
@@ -306,21 +333,35 @@ class DynamicRouteSimulation:
             for event in self.events:
                 if event.should_trigger(current_step=step_index, current_time=current_time):
                     event_triggered = True
-                    event.mark_triggered()
                     last_triggered_event = event
 
-                    # Sovelletaan eventti vain jos muuttuva kaari on vielä tulevalla reitillä
-                    if self._future_route_contains_event_edge(vehicle, event):
-                        event_successfully_applied = self.environment.apply_event(event)
+                    affects_future_route = self._future_route_contains_event_edge(vehicle, event)
+                    applied = self.environment.apply_event(event)
 
-                        if event_successfully_applied:
-                            if hasattr(self.planner, "apply_event_to_internal_state"):
-                                self.planner.apply_event_to_internal_state(
-                                    self.environment.graph,
-                                    event.change_type,
-                                    event.edge,
-                                    event.cost_multiplier,
-                                )
+                    event_record = {
+                        "edge": event.edge,
+                        "trigger_step": step_index,
+                        "trigger_time": round(current_time, 6),
+                        "current_node": vehicle.current_node,
+                        "applied_to_graph": applied,
+                        "affected_future_route": affects_future_route,
+                        "replan_attempted": False,
+                        "replan_success": None,
+                    }
+
+                    if applied:
+                        event_successfully_applied = True
+
+                        if hasattr(self.planner, "apply_event_to_internal_state"):
+                            self.planner.apply_event_to_internal_state(
+                                self.environment.graph,
+                                event.change_type,
+                                event.edge,
+                                event.cost_multiplier,
+                            )
+
+                        if affects_future_route:
+                            event_record["replan_attempted"] = True
 
                             try:
                                 old_remaining_route = vehicle.remaining_route()
@@ -336,6 +377,7 @@ class DynamicRouteSimulation:
 
                                 vehicle.replace_planned_route_from_current(replan_result.route)
                                 replanning_time_total += replan_result.planning_time
+                                event_record["replan_success"] = True
 
                             except nx.NetworkXNoPath:
                                 failed = True
@@ -343,7 +385,11 @@ class DynamicRouteSimulation:
                                     "Muutoksen jälkeen uutta reittiä ei löytynyt nykyisestä sijainnista kohteeseen."
                                 )
                                 failure_category = "no_alternative_path"
+                                event_record["replan_success"] = False
+                                event_log.append(event_record)
                                 break
+
+                    event_log.append(event_record)
 
             if failed:
                 break
@@ -376,6 +422,7 @@ class DynamicRouteSimulation:
             step_index += 1
 
         result_event = last_triggered_event if last_triggered_event is not None else first_event
+        failure_node = vehicle.current_node if failed else None
 
         return SimulationResult(
             algorithm_name=self.planner.name,
@@ -403,4 +450,6 @@ class DynamicRouteSimulation:
             failed=failed,
             failure_reason=failure_reason,
             failure_category=failure_category,
+            failure_node=failure_node,
+            event_log=event_log,
         )

@@ -45,6 +45,10 @@ DEFAULT_FIELDNAMES = [
     "arrived",
     "failed",
     "failure_reason",
+    "failure_category",
+    "failure_node",
+
+    "event_log",
 
     "original_route",
     "final_traversed_route",

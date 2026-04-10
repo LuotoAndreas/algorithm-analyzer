@@ -2,6 +2,26 @@ import osmnx as ox
 import networkx as nx
 
 
+def compute_graph_max_speed_mps(graph: nx.MultiDiGraph) -> float:
+    max_kph = 0.0
+
+    for _, _, _, data in graph.edges(keys=True, data=True):
+        speed_kph = data.get("speed_kph")
+        if speed_kph is None:
+            continue
+
+        if isinstance(speed_kph, (list, tuple)):
+            values = [float(x) for x in speed_kph if x is not None]
+            if values:
+                max_kph = max(max_kph, max(values))
+        else:
+            max_kph = max(max_kph, float(speed_kph))
+
+    # Turvallinen yläraja heuristiikalle
+    max_kph = max(max_kph, 200.0)
+    return max_kph / 3.6
+
+
 def load_map(
     place_name: str,
     network_type: str = "drive",
@@ -37,6 +57,9 @@ def load_map(
     # Lisää matkustusajat sekunteina nopeuksien ja pituuksien perusteella.
     graph = ox.add_edge_travel_times(graph)
 
+    # Tallennetaan heuristiikkaa varten turvallinen maksiminopeus.
+    graph.graph["max_speed_mps"] = compute_graph_max_speed_mps(graph)
+
     return graph
 
 
@@ -53,6 +76,10 @@ def get_largest_strongly_connected_component(graph: nx.MultiDiGraph) -> nx.Multi
     """
     largest_component_nodes = max(nx.strongly_connected_components(graph), key=len)
     subgraph = graph.subgraph(largest_component_nodes).copy()
+
+    # Säilytetään myös heuristiikan käyttämä metadata.
+    subgraph.graph["max_speed_mps"] = graph.graph.get("max_speed_mps", 200.0 / 3.6)
+
     return subgraph
 
 
