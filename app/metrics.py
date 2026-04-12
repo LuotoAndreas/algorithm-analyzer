@@ -92,24 +92,48 @@ def build_result_row(
     else:
         replanning_time_saved = None
 
+    event_log = simulation_result.event_log
+    ineffective_replans = max(0, simulation_result.events_triggering_replan - simulation_result.successful_replans)
+
     row = {
         "scenario_id": scenario_id,
         "algorithm_name": simulation_result.algorithm_name,
 
         "start_node": simulation_result.start_node,
         "goal_node": simulation_result.goal_node,
+        "depot_node": scenario.delivery_task.depot_node,
+        "customer_node": scenario.delivery_task.customer_node,
+        "reference_algorithm_name": scenario.reference_algorithm_name,
+        "disruption_mode": scenario.disruption_mode,
 
         "change_type": simulation_result.change_type,
         "changed_edge": simulation_result.changed_edge,
+        "changed_edge_count": simulation_result.changed_edge_count,
+        "event_scope": simulation_result.event_scope,
+        "event_scope_label": simulation_result.event_scope_label,
+        "impact_spread": simulation_result.impact_spread,
+        "impact_spread_label": simulation_result.impact_spread_label,
+        "region_radius_m": simulation_result.region_radius_m,
+        "event_severity": first_event.severity_label if first_event else None,
         "event_step": first_event.event_step if first_event else None,
         "event_time": first_event.event_time if first_event else None,
         "event_count": len(scenario.events),
         "event_steps": [event.event_step for event in scenario.events],
         "event_times": [event.event_time for event in scenario.events],
         "all_changed_edges": [event.edge for event in scenario.events],
+        "all_affected_edge_counts": [event.affected_edge_count for event in scenario.events],
+        "all_event_scopes": [event.event_scope for event in scenario.events],
+        "all_impact_spreads": [event.impact_spread for event in scenario.events],
         "event_triggered": simulation_result.event_triggered,
         "event_successfully_applied": simulation_result.event_successfully_applied,
         "cost_multiplier": simulation_result.cost_multiplier,
+
+        "planned_delivery_time": simulation_result.planned_delivery_time,
+        "actual_delivery_time": simulation_result.actual_delivery_time,
+        "delivery_deadline_time": simulation_result.delivery_deadline_time,
+        "delivery_delay_seconds": simulation_result.delivery_delay_seconds,
+        "delivery_delay_pct": simulation_result.delivery_delay_pct,
+        "service_level_met": simulation_result.service_level_met,
 
         "original_route_node_count": original_route_node_count,
         "original_route_edge_count": original_route_edge_count,
@@ -130,6 +154,11 @@ def build_result_row(
         "total_planning_time": simulation_result.total_planning_time,
 
         "replanning_count": simulation_result.replanning_count,
+        "events_total": simulation_result.events_total,
+        "events_affecting_remaining_route": simulation_result.events_affecting_remaining_route,
+        "events_triggering_replan": simulation_result.events_triggering_replan,
+        "successful_replans": simulation_result.successful_replans,
+        "ineffective_replans": ineffective_replans,
         "route_changed_after_event": simulation_result.route_changed_after_event,
         "route_change_ratio": route_change_ratio,
 
@@ -176,10 +205,17 @@ def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             if category:
                 failure_category_counts[category] = failure_category_counts.get(category, 0) + 1
 
+        service_level_true = [r for r in successful_rows if r.get("service_level_met") is True]
+        service_level_false = [r for r in successful_rows if r.get("service_level_met") is False]
+        service_level_rate = (len(service_level_true) / len(successful_rows)) if successful_rows else None
+
         summary[algorithm_name] = {
             "scenario_count": count,
             "successful_count": len(successful_rows),
             "failed_count": count - len(successful_rows),
+            "service_level_met_count": len(service_level_true),
+            "service_level_failed_count": len(service_level_false),
+            "service_level_rate": service_level_rate,
             "failure_category_counts": failure_category_counts,
             "avg_original_route_length": avg("original_route_length"),
             "avg_original_route_travel_time": avg("original_route_travel_time"),
@@ -193,6 +229,13 @@ def summarize_rows(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             "avg_replanning_time_total": avg("replanning_time_total"),
             "avg_total_planning_time": avg("total_planning_time"),
             "avg_replanning_count": avg("replanning_count"),
+            "avg_delivery_delay_seconds": avg("delivery_delay_seconds"),
+            "avg_delivery_delay_pct": avg("delivery_delay_pct"),
+            "avg_events_affecting_remaining_route": avg("events_affecting_remaining_route"),
+            "avg_events_triggering_replan": avg("events_triggering_replan"),
+            "avg_successful_replans": avg("successful_replans"),
+            "avg_changed_edge_count": avg("changed_edge_count"),
+            "avg_region_radius_m": avg("region_radius_m"),
             "avg_route_change_ratio": avg("route_change_ratio"),
         }
 

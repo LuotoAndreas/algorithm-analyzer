@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import networkx as nx
 
+from app.delivery import DeliveryTask
 from app.environment import RoadEnvironment
 from app.events import EdgeEvent
 from app.planners import BasePlanner, PlanResult
@@ -33,11 +34,28 @@ class SimulationResult:
     total_distance_travelled: float
     total_travel_time: float
 
+    planned_delivery_time: float | None
+    actual_delivery_time: float | None
+    delivery_deadline_time: float | None
+    delivery_delay_seconds: float | None
+    delivery_delay_pct: float | None
+    service_level_met: bool | None
+
     replanning_count: int
     event_triggered: bool
     event_successfully_applied: bool
+    events_total: int
+    events_affecting_remaining_route: int
+    events_triggering_replan: int
+    successful_replans: int
 
     changed_edge: tuple[int, int] | None
+    changed_edge_count: int
+    event_scope: str | None
+    event_scope_label: str | None
+    impact_spread: str | None
+    impact_spread_label: str | None
+    region_radius_m: float | None
     change_type: str | None
     cost_multiplier: float | None
 
@@ -63,12 +81,14 @@ class DynamicRouteSimulation:
         start_node: int,
         goal_node: int,
         events: list[EdgeEvent] | None = None,
+        delivery_task: DeliveryTask | None = None,
     ):
         self.environment = environment
         self.planner = planner
         self.start_node = start_node
         self.goal_node = goal_node
         self.events = events or []
+        self.delivery_task = delivery_task
 
     def _get_best_edge_data(self, from_node: int, to_node: int) -> dict:
         """
@@ -123,17 +143,10 @@ class DynamicRouteSimulation:
         return float(travel_time)
 
     def _future_route_contains_event_edge(self, vehicle: VehicleState, event: EdgeEvent) -> bool:
-        """
-        Tarkistaa, sisältääkö ajoneuvon jäljellä oleva reitti eventin kohdekaaren.
-        """
+        """Tarkistaa, sisältääkö ajoneuvon jäljellä oleva reitti tapahtuman kohdekaaren tai alueen."""
         route = vehicle.remaining_route()
-        from_node, to_node = event.edge
-
-        for i in range(len(route) - 1):
-            if route[i] == from_node and route[i + 1] == to_node:
-                return True
-
-        return False
+        route_edges = {(route[i], route[i + 1]) for i in range(len(route) - 1)}
+        return any(edge in route_edges for edge in event.target_edges)
 
     def _calculate_route_length(self, route: list[int]) -> float:
         """
@@ -271,6 +284,9 @@ class DynamicRouteSimulation:
         route_changed_after_event = False
         original_route_travel_time_with_events = None
         event_log: list[dict] = []
+        events_affecting_remaining_route = 0
+        events_triggering_replan = 0
+        successful_replans = 0
 
         first_event = self.events[0] if self.events else None
         last_triggered_event: EdgeEvent | None = None
@@ -297,10 +313,26 @@ class DynamicRouteSimulation:
                 original_route_travel_time_with_events=None,
                 total_distance_travelled=0.0,
                 total_travel_time=0.0,
+                planned_delivery_time=None,
+                actual_delivery_time=None,
+                delivery_deadline_time=self.delivery_task.deadline_time if self.delivery_task else None,
+                delivery_delay_seconds=None,
+                delivery_delay_pct=None,
+                service_level_met=None,
                 replanning_count=0,
                 event_triggered=False,
                 event_successfully_applied=False,
+                events_total=len(self.events),
+                events_affecting_remaining_route=0,
+                events_triggering_replan=0,
+                successful_replans=0,
                 changed_edge=first_event.edge if first_event else None,
+                changed_edge_count=first_event.affected_edge_count if first_event else 0,
+                event_scope=first_event.event_scope if first_event else None,
+                event_scope_label=first_event.event_scope_label if first_event else None,
+                impact_spread=first_event.impact_spread if first_event else None,
+                impact_spread_label=first_event.impact_spread_label if first_event else None,
+                region_radius_m=first_event.region_radius_m if first_event else None,
                 change_type=first_event.change_type if first_event else None,
                 cost_multiplier=first_event.cost_multiplier if first_event else None,
                 route_changed_after_event=False,
@@ -340,6 +372,14 @@ class DynamicRouteSimulation:
 
                     event_record = {
                         "edge": event.edge,
+                        "affected_edges": event.target_edges,
+                        "affected_edge_count": event.affected_edge_count,
+                        "event_scope": event.event_scope,
+                        "event_scope_label": event.event_scope_label,
+                        "impact_spread": event.impact_spread,
+                        "impact_spread_label": event.impact_spread_label,
+                        "region_radius_m": event.region_radius_m,
+                        "severity_label": event.severity_label,
                         "trigger_step": step_index,
                         "trigger_time": round(current_time, 6),
                         "current_node": vehicle.current_node,
@@ -352,16 +392,21 @@ class DynamicRouteSimulation:
                     if applied:
                         event_successfully_applied = True
 
+                        if affects_future_route:
+                            events_affecting_remaining_route += 1
+
                         if hasattr(self.planner, "apply_event_to_internal_state"):
                             self.planner.apply_event_to_internal_state(
                                 self.environment.graph,
                                 event.change_type,
                                 event.edge,
                                 event.cost_multiplier,
+                                event.target_edges,
                             )
 
                         if affects_future_route:
                             event_record["replan_attempted"] = True
+                            events_triggering_replan += 1
 
                             try:
                                 old_remaining_route = vehicle.remaining_route()
@@ -377,6 +422,7 @@ class DynamicRouteSimulation:
 
                                 vehicle.replace_planned_route_from_current(replan_result.route)
                                 replanning_time_total += replan_result.planning_time
+                                successful_replans += 1
                                 event_record["replan_success"] = True
 
                             except nx.NetworkXNoPath:
@@ -424,6 +470,26 @@ class DynamicRouteSimulation:
         result_event = last_triggered_event if last_triggered_event is not None else first_event
         failure_node = vehicle.current_node if failed else None
 
+        planned_delivery_time = None
+        actual_delivery_time = None
+        delivery_deadline_time = self.delivery_task.deadline_time if self.delivery_task else None
+        delivery_delay_seconds = None
+        delivery_delay_pct = None
+        service_level_met = None
+
+        if self.delivery_task is not None:
+            planned_delivery_time = self.delivery_task.planned_completion_time
+            if vehicle.has_arrived and not failed:
+                actual_delivery_time = self.delivery_task.departure_time + vehicle.total_travel_time + self.delivery_task.service_time_seconds
+
+            if planned_delivery_time is not None and actual_delivery_time is not None:
+                delivery_delay_seconds = actual_delivery_time - planned_delivery_time
+                if planned_delivery_time > 0:
+                    delivery_delay_pct = (delivery_delay_seconds / planned_delivery_time) * 100.0
+
+            if delivery_deadline_time is not None and actual_delivery_time is not None:
+                service_level_met = actual_delivery_time <= delivery_deadline_time
+
         return SimulationResult(
             algorithm_name=self.planner.name,
             start_node=self.start_node,
@@ -439,10 +505,26 @@ class DynamicRouteSimulation:
             original_route_travel_time_with_events=original_route_travel_time_with_events,
             total_distance_travelled=vehicle.total_distance_travelled,
             total_travel_time=vehicle.total_travel_time,
+            planned_delivery_time=planned_delivery_time,
+            actual_delivery_time=actual_delivery_time,
+            delivery_deadline_time=delivery_deadline_time,
+            delivery_delay_seconds=delivery_delay_seconds,
+            delivery_delay_pct=delivery_delay_pct,
+            service_level_met=service_level_met,
             replanning_count=vehicle.replanning_count,
             event_triggered=event_triggered,
             event_successfully_applied=event_successfully_applied,
+            events_total=len(self.events),
+            events_affecting_remaining_route=events_affecting_remaining_route,
+            events_triggering_replan=events_triggering_replan,
+            successful_replans=successful_replans,
             changed_edge=result_event.edge if result_event else None,
+            changed_edge_count=result_event.affected_edge_count if result_event else 0,
+            event_scope=result_event.event_scope if result_event else None,
+            event_scope_label=result_event.event_scope_label if result_event else None,
+            impact_spread=result_event.impact_spread if result_event else None,
+            impact_spread_label=result_event.impact_spread_label if result_event else None,
+            region_radius_m=result_event.region_radius_m if result_event else None,
             change_type=result_event.change_type if result_event else None,
             cost_multiplier=result_event.cost_multiplier if result_event else None,
             route_changed_after_event=route_changed_after_event,

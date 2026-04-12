@@ -25,9 +25,13 @@ class EventScenarioConfig:
 
 @dataclass
 class EventConfig:
+    default_change_type: str = "increase_cost"
+    default_cost_multiplier: float = 3.0
+    default_event_count: int = 5
+    default_disruption_mode: str = "route_corridor"
     scenarios: list[EventScenarioConfig] = field(default_factory=lambda: [
-        EventScenarioConfig(change_type="remove", cost_multiplier=None),
         EventScenarioConfig(change_type="increase_cost", cost_multiplier=3.0),
+        EventScenarioConfig(change_type="remove", cost_multiplier=None),
     ])
 
 

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kokeen tulokset</title>
+    <title>Last mile -kokeen tulokset</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
@@ -13,26 +13,56 @@
         </section>
         <header class="page-header">
             <p class="eyebrow">Tulokset</p>
-            <h1>Dynaamisen reitinhaun analyysi</h1>
+            <h1>Dynaamisen last mile -reitityksen analyysi</h1>
             <p class="description">
-                Alla näkyvät suoritetun kokeen yhteenvetotiedot, algoritmikohtaiset tulokset sekä skenaariokohtaiset tarkemmat näkymät.
+                Alla näkyvät suoritetun kokeen yhteenvetotiedot, algoritmikohtaiset tulokset sekä skenaariokohtaiset toimitus- ja häiriönäkymät.
             </p>
         </header>
 
         <main class="content">
             <section class="card">
                 <h2>Kokeen asetukset</h2>
+                <div class="info-grid" style="margin-bottom: 1rem;">
+                    <div class="info-item">
+                        <strong>Häiriötyyppi</strong>
+                        <span>{{ result.change_type }}</span>
+                    </div>
+                    <div class="info-item">
+                        <strong>Häiriömalli</strong>
+                        <span>{{ result.disruption_mode }}</span>
+                    </div>
+                    <div class="info-item">
+                        <strong>Hyväksyttyjä skenaarioita</strong>
+                        <span>{{ result.accepted_scenarios }}</span>
+                    </div>
+                    <div class="info-item">
+                        <strong>Hylättyjä heikkoja skenaarioita</strong>
+                        <span>{{ result.rejected_as_trivial if result.rejected_as_trivial is not none else 0 }}</span>
+                    </div>
+                </div>
+
                 <div class="info-grid">
                     <div class="info-item"><strong>Alue</strong><span>{{ result.place_name }}</span></div>
                     <div class="info-item"><strong>Seed</strong><span>{{ result.seed }}</span></div>
                     <div class="info-item"><strong>Testien tavoitemäärä</strong><span>{{ result.target_count }}</span></div>
                     <div class="info-item"><strong>Maksimiyritykset</strong><span>{{ result.max_attempts }}</span></div>
-                    <div class="info-item"><strong>Muutostyyppi</strong><span>{{ result.change_type }}</span></div>
-                    <div class="info-item"><strong>Kustannuskerroin</strong><span>{{ result.cost_multiplier }}</span></div>
-                    <div class="info-item"><strong>Tiesulkujen määrä</strong><span>{{ result.event_count }}</span></div>
-                    <div class="info-item"><strong>Hyväksyttyjä skenaarioita</strong><span>{{ result.accepted_scenarios }}</span></div>
+                    <div class="info-item"><strong>Häiriötyyppi</strong><span>{{ result.change_type }}</span></div>
+                    <div class="info-item"><strong>Ruuhkan kustannuskerroin</strong><span>{{ result.cost_multiplier }}</span></div>
+                    <div class="info-item"><strong>Häiriöiden määrä</strong><span>{{ result.event_count }}</span></div>
+                    <div class="info-item"><strong>Hyväksyttyjä toimitusskenaarioita</strong><span>{{ result.accepted_scenarios }}</span></div>
+                    <div class="info-item"><strong>Palveluaika asiakkaalla</strong><span>{{ result.service_time_seconds }} s</span></div>
+                    <div class="info-item"><strong>Palvelutason aikakerroin</strong><span>{{ result.delivery_deadline_factor }}</span></div>
+                    <div class="info-item"><strong>Häiriöalueen muodostustapa</strong><span>{{ result.disruption_mode }}</span></div>
                     <div class="info-item info-item-wide"><strong>Tallennettu tiedosto</strong><span>{{ result.output_path }}</span></div>
                 </div>
+                <p class="section-note">
+                    <strong>Häiriötyyppien tulkinta:</strong>
+                    <span><code>increase_cost</code> tarkoittaa alueellista ruuhkaa tai hidastumista, jossa useiden kaarien kulkuaika kasvaa. <code>remove</code> tarkoittaa alueellista sulkua tai käyttökatkoa, jossa useita kaaria poistetaan käytöstä saman häiriöalueen sisältä.</span>
+                </p>
+                <p class="section-note">
+                    <strong>Häiriöalueen muodostustavat:</strong>
+                    <span><code>route_corridor</code> muodostaa häiriön toimituskäytävän ympärille. <code>traffic_hotspot</code> muodostaa häiriön vilkkaan solmukohdan ympärille, jolloin se muistuttaa enemmän paikallista ruuhka- tai ongelma-aluetta.</span>
+                </p>
             </section>
 
             <section class="card">
@@ -71,7 +101,7 @@
                 <h2>Skenaariokohtaiset vertailut</h2>
                 <p class="section-note">
                     Avaa skenaario nähdäksesi kaikkien algoritmien tulokset rinnakkain.
-                    Karttaa klikkaamalla voit vaihtaa koko alueen ja reittizoomin välillä.
+                    Karttakuvassa punainen katkoviiva näyttää alkuperäisen suunnitellun reitin, vihreä toteutuneen reitin ja korostetut kohteet häiriöalueen ankkurikohdat.
                 </p>
                 {% for scenario_id, scenario_data in result.grouped_rows.items() %}
                     {% set scenario_rows = scenario_data["rows"] %}
@@ -85,7 +115,7 @@
                         <summary>
                             <span><strong>Skenaario {{ scenario_id }}</strong></span>
                             <span class="scenario-summary-meta">
-                                {{ scenario_rows|length }} algoritmia · {{ scenario_rows[0]["event_count"] }} muutosta
+                                {{ scenario_rows|length }} algoritmia · {{ scenario_rows[0]["event_count"] }} häiriötä
                                 {% if scenario_status == "all-success" %}
                                     · Kaikki onnistuivat
                                 {% elif scenario_status == "all-failed" %}
@@ -98,6 +128,15 @@
 
                         <div class="scenario-content">
                             {% set first_row = scenario_rows[0] %}
+
+                            <div class="info-grid scenario-meta-grid">
+                                <div class="info-item"><strong>Viitealgoritmi</strong><span>{{ first_row["reference_algorithm_name"] }}</span></div>
+                                <div class="info-item"><strong>Häiriön tyyppi</strong><span>{{ first_row["event_scope_label"] if first_row["event_scope_label"] else "N/A" }}</span></div>
+                                <div class="info-item"><strong>Vaikuttaneita kaaria</strong><span>{{ first_row["changed_edge_count"] if first_row["changed_edge_count"] is not none else "N/A" }}</span></div>
+                                <div class="info-item"><strong>Häiriön laajuus</strong><span>{{ first_row["impact_spread_label"] if first_row["impact_spread_label"] else "N/A" }}</span></div>
+                                <div class="info-item"><strong>Häiriön vakavuus</strong><span>{{ first_row["event_severity"] if first_row["event_severity"] else "N/A" }}</span></div>
+                                <div class="info-item"><strong>Palvelutason aikaraja</strong><span>{{ "%.2f s"|format(first_row["delivery_deadline_time"]) if first_row["delivery_deadline_time"] is not none else "N/A" }}</span></div>
+                            </div>
 
                             {% if not first_row["route_image_full"] %}
                                 <a
@@ -146,6 +185,35 @@
                                                 <span>
                                                     {{ "%.2f"|format(row["replanning_time_saved"]) if row["replanning_time_saved"] is not none else "N/A" }}
                                                 </span>
+                                            </div>
+
+                                            <div class="info-item">
+                                                <strong>Toimitusviive (s)</strong>
+                                                <span>
+                                                    {{ "%.2f"|format(row["delivery_delay_seconds"]) if row["delivery_delay_seconds"] is not none else "N/A" }}
+                                                </span>
+                                            </div>
+
+                                            <div class="info-item">
+                                                <strong>Palvelutaso täyttyi</strong>
+                                                <span>
+                                                    {{ "Kyllä" if row["service_level_met"] else ("Ei" if row["service_level_met"] is not none else "N/A") }}
+                                                </span>
+                                            </div>
+
+                                            <div class="info-item">
+                                                <strong>Onnistuneet uudelleenreititykset</strong>
+                                                <span>{{ row["successful_replans"] }}</span>
+                                            </div>
+
+                                            <div class="info-item">
+                                                <strong>Häiriöalueen kaaria</strong>
+                                                <span>{{ row["changed_edge_count"] if row["changed_edge_count"] is not none else "N/A" }}</span>
+                                            </div>
+
+                                            <div class="info-item">
+                                                <strong>Häiriön laajuus</strong>
+                                                <span>{{ row["impact_spread_label"] if row["impact_spread_label"] else "N/A" }}</span>
                                             </div>
 
                                             <div class="info-item">
@@ -235,7 +303,14 @@
                                     </div>
                                 {% endif %}
                                 <div>
-                                    <strong>Keskim. alkuperäinen aika (s):</strong>
+                                    <strong>Palvelutaso täyttyi:</strong>
+                                    {{ "%.1f %%"|format(values["service_level_rate"] * 100) if values["service_level_rate"] is not none else "N/A" }}
+                                    {% if values["service_level_met_count"] is not none %}
+                                        ({{ values["service_level_met_count"] }}/{{ values["successful_count"] }})
+                                    {% endif %}
+                                </div>
+                                <div>
+                                    <strong>Keskim. alkuperäinen ajoaika (s):</strong>
                                     {{ "%.2f"|format(values["avg_original_route_travel_time"]) if values["avg_original_route_travel_time"] is not none else "N/A" }}
                                 </div>
                                 <div>
@@ -253,6 +328,18 @@
                                     {{ "%.2f"|format(values["avg_replanning_time_saved"]) if values["avg_replanning_time_saved"] is not none else "N/A" }}
                                 </div>
                                 <div>
+                                    <strong>Keskim. toimitusviive (s):</strong>
+                                    {{ "%.2f"|format(values["avg_delivery_delay_seconds"]) if values["avg_delivery_delay_seconds"] is not none else "N/A" }}
+                                </div>
+                                <div>
+                                    <strong>Keskim. replan-tapahtumia:</strong>
+                                    {{ "%.2f"|format(values["avg_events_triggering_replan"]) if values["avg_events_triggering_replan"] is not none else "N/A" }}
+                                </div>
+                                <div>
+                                    <strong>Keskim. onnistuneita replannauksia:</strong>
+                                    {{ "%.2f"|format(values["avg_successful_replans"]) if values["avg_successful_replans"] is not none else "N/A" }}
+                                </div>
+                                <div>
                                     <strong>Keskim. toteutunut matka:</strong>
                                     {{ "%.2f"|format(values["avg_total_distance_travelled"]) if values["avg_total_distance_travelled"] is not none else "N/A" }}
                                 </div>
@@ -263,6 +350,10 @@
                                 <div>
                                     <strong>Keskim. kokonaislaskenta-aika:</strong>
                                     {{ "%.6f"|format(values["avg_total_planning_time"]) if values["avg_total_planning_time"] is not none else "N/A" }}
+                                </div>
+                                <div>
+                                    <strong>Keskim. häiriöalueen kaaria:</strong>
+                                    {{ "%.2f"|format(values["avg_changed_edge_count"]) if values["avg_changed_edge_count"] is not none else "N/A" }}
                                 </div>
                                 <div>
                                     <strong>Keskim. reitin muutosaste:</strong>
@@ -287,6 +378,11 @@
                                 <th>Alkuperäinen aika muutoksilla (s)</th>
                                 <th>Toteutunut aika (s)</th>
                                 <th>Uudelleenreitityksen hyöty (s)</th>
+                                <th>Toimitusviive (s)</th>
+                                <th>Palvelutaso</th>
+                                <th>Häiriöalue</th>
+                                <th>Vaikuttaneita kaaria</th>
+                                <th>Laajuus</th>
                                 <th>Toteutunut matka (m)</th>
                                 <th>Piteneminen %</th>
                                 <th>Kokonaislaskenta-aika (s)</th>
@@ -309,6 +405,11 @@
                                     <td>{{ "%.2f"|format(row["original_route_travel_time_with_events"]) if row["original_route_travel_time_with_events"] is not none else "N/A" }}</td>
                                     <td>{{ "%.2f"|format(row["total_travel_time"]) if row["total_travel_time"] is not none else "N/A" }}</td>
                                     <td>{{ "%.2f"|format(row["replanning_time_saved"]) if row["replanning_time_saved"] is not none else "N/A" }}</td>
+                                    <td>{{ "%.2f"|format(row["delivery_delay_seconds"]) if row["delivery_delay_seconds"] is not none else "N/A" }}</td>
+                                    <td>{{ "Kyllä" if row["service_level_met"] else ("Ei" if row["service_level_met"] is not none else "N/A") }}</td>
+                                    <td>{{ row["event_scope_label"] if row["event_scope_label"] else "N/A" }}</td>
+                                    <td>{{ row["changed_edge_count"] if row["changed_edge_count"] is not none else "N/A" }}</td>
+                                    <td>{{ row["impact_spread_label"] if row["impact_spread_label"] else "N/A" }}</td>
                                     <td>{{ "%.2f"|format(row["total_distance_travelled"]) if row["total_distance_travelled"] is not none else "N/A" }}</td>
                                     <td>{{ "%.2f"|format(row["distance_increase_pct"]) if row["distance_increase_pct"] is not none else "N/A" }}</td>
                                     <td>{{ "%.6f"|format(row["total_planning_time"]) if row["total_planning_time"] is not none else "N/A" }}</td>

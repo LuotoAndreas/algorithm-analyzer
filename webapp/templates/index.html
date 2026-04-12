@@ -3,16 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dynaamisen reitinhaun analyysi</title>
+    <title>Dynaamisen last mile -reitityksen analyysi</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
     <div class="page-shell">
         <header class="page-header">
             <p class="eyebrow">Analyysiympäristö</p>
-            <h1>Dynaamisen reitinhaun analyysi</h1>
+            <h1>Dynaamisen last mile -reitityksen analyysi</h1>
             <p class="description">
-                Tällä työkalulla voidaan ajaa simuloituja reitinhakukokeita ja tarkastella algoritmien toimintaa dynaamisessa tieverkossa.
+                Tällä työkalulla voidaan ajaa simuloituja last mile -toimituskokeita ja tarkastella, miten erilaiset reitinhakutavat reagoivat muuttuviin tieverkon häiriöihin.
             </p>
         </header>
 
@@ -27,7 +27,7 @@
                     </label>
 
                     <label class="field-group">
-                        <span>Seed</span>
+                        <span>Seed (satunnaissiementäminen)</span>
                         <input type="number" name="seed" value="42">
                     </label>
 
@@ -37,20 +37,20 @@
                     </label>
 
                     <label class="field-group">
-                        <span>Maksimiyritykset</span>
+                        <span>Maksimiyritykset kelvollisen skenaarion löytämiseksi</span>
                         <input type="number" name="max_attempts" value="20" min="1">
                     </label>
 
                     <label class="field-group">
-                        <span>Muutostyyppi</span>
+                        <span>Häiriötyyppi</span>
                         <select name="change_type" id="change_type">
-                            <option value="remove">remove</option>
-                            <option value="increase_cost">increase_cost</option>
+                            <option value="increase_cost" selected>increase_cost = alueellinen hidastuminen / ruuhka</option>
+                            <option value="remove">remove = alueellinen sulku / käyttökelvottomuus</option>
                         </select>
                     </label>
 
                     <label class="field-group" id="cost-multiplier-group">
-                        <span>Kustannuskerroin</span>
+                        <span>Kustannuskerroin ruuhkalle</span>
                         <input
                             type="number"
                             name="cost_multiplier"
@@ -62,18 +62,43 @@
                     </label>
 
                     <label class="field-group">
-                        <span>Tiesulkujen määrä</span>
+                        <span>Häiriöiden määrä per toimitus</span>
                         <select name="event_count">
-                            <option value="1">1 (yksi muutos)</option>
-                            <option value="3" selected>3 (kohtalaisesti muutoksia)</option>
-                            <option value="5">5 (paljon muutoksia)</option>
+                            <option value="1">1 (kevyt skenaario)</option>
+                            <option value="3">3 (kohtalainen skenaario)</option>
+                            <option value="5" selected>5 (häiriöinen skenaario)</option>
                         </select>
+                    </label>
+
+                    <label class="field-group">
+                        <span>Palveluaika asiakkaalla (sekunteina)</span>
+                        <input type="number" name="service_time_seconds" value="120" min="0" step="10">
+                        <small>120 s = noin 2 minuuttia asiakkaalla pysähtymistä. Tämä lisätään toimituksen kokonaisaikaan.</small>
+                    </label>
+
+                    <label class="field-group">
+                        <span>Häiriöalueen muodostustapa</span>
+                        <select name="disruption_mode">
+                            <option value="route_corridor" selected>route_corridor = häiriö toimituskäytävällä</option>
+                            <option value="traffic_hotspot">traffic_hotspot = häiriö vilkkaan solmukohdan ympärillä</option>
+                        </select>
+                        <small>Suositus graduun: route_corridor. Se on helpompi tulkita yksittäisen toimitussiirtymän häiriönä, koska muutos kohdistuu suoraan alkuperäisen reitin lähellä oleviin tieosuuksiin. traffic_hotspot kannattaa pitää vertailuskenaariona ruuhkatyyppisille paikallisille häiriöille.</small>
+                    </label>
+
+                    <label class="field-group">
+                        <span>Palvelutason aikakerroin</span>
+                        <small>Esim. 1.15 tarkoittaa, että toimitus saa kestää 15 % alkuperäistä suunnitelmaa pidempään ennen kuin palvelutaso rikkoutuu.</small>
+                        <input type="number" name="delivery_deadline_factor" value="1.15" min="1" step="0.05">
                     </label>
 
                     <div class="button-row">
                         <button type="submit" id="submit-button">Aja kokeet</button>
                     </div>
                 </form>
+                <div class="info-grid" style="margin-top: 1rem;">
+                    <div class="info-item info-item-wide"><strong>Suositus perusajoon</strong><span>Kamppi, Helsinki, Suomi · seed 42 · 5 testiä · 50 yritystä · increase_cost · kerroin 3.0 · 5 häiriötä · palveluaika 120 s · palvelutason aikakerroin 1.15 · route_corridor</span></div>
+                    <div class="info-item info-item-wide"><strong>Miten tulkita palvelutaso?</strong><span>Ohjelma laskee ensin alkuperäisen toimitusajan. Sen jälkeen deadline muodostetaan kaavalla: alkuperäinen toimitusaika × palvelutason aikakerroin. Jos toteutunut toimitus jää tämän rajan alle, palvelutaso täyttyy.</span></div>
+                </div>
             </section>
         </main>
     </div>
@@ -82,7 +107,7 @@
         <div class="loading-box">
             <div class="spinner" aria-hidden="true"></div>
             <h2>Kokeita suoritetaan</h2>
-            <p>Reittejä haetaan ja tuloksia lasketaan. Tämä voi kestää hetken.</p>
+            <p>Reittejä haetaan, häiriöalueita muodostetaan ja toimitusten tuloksia lasketaan. Tämä voi kestää hetken.</p>
         </div>
     </div>
 

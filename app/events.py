@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, Optional, Tuple
 
 
@@ -8,30 +8,78 @@ ChangeType = Literal["remove", "increase_cost"]
 @dataclass
 class EdgeEvent:
     """
-    Kuvaa yksittäistä dynaamista tapahtumaa, joka kohdistuu yhteen tieosuuteen.
+    Kuvaa dynaamista tapahtumaa, joka voi kohdistua yhteen tieosuuteen
+    tai useampaan samaa toimituskäytävää häiritsevään tieosuuteen.
 
     Attributes:
         event_step: Vanha askelpohjainen laukaisu. Säilytetään siirtymävaiheessa.
         event_time: Uusi aikapohjainen laukaisu sekunteina simulaation alusta.
-        edge: Muutettava suunnattu kaari muodossa (from_node, to_node)
-        change_type: Muutoksen tyyppi
-        cost_multiplier: Kustannuksen kerroin, jos change_type == "increase_cost"
-        triggered: Onko tapahtuma jo aktivoitu
+        edge: Tapahtuman ankkurikaari muodossa (from_node, to_node).
+        affected_edges: Kaikki kaaret, joihin muutos kohdistuu. Jos tyhjä,
+            käytetään edge-arvoa.
+        change_type: Muutoksen tyyppi.
+        cost_multiplier: Kustannuksen kerroin, jos change_type == "increase_cost".
+        region_center: Mahdollisen alueellisen muodostuksen keskipiste.
+        region_radius_m: Mahdollinen sisäinen apumittari häiriöalueelle.
+            Tätä ei tarvitse käyttää tulosten päämittarina.
+        severity_label: Tapahtuman vakavuusluokka raportointia varten.
+        triggered: Onko tapahtuma jo aktivoitu.
     """
     event_step: Optional[int]
     event_time: Optional[float]
     edge: Tuple[int, int]
     change_type: ChangeType
     cost_multiplier: Optional[float] = None
+    affected_edges: list[Tuple[int, int]] = field(default_factory=list)
+    region_center: Optional[Tuple[float, float]] = None
+    region_radius_m: Optional[float] = None
+    severity_label: Optional[str] = None
     triggered: bool = False
 
-    def should_trigger(self, current_step: int | None = None, current_time: float | None = None) -> bool:
-        """
-        Tarkistaa, pitäisikö tapahtuma aktivoida tällä simulaation hetkellä.
+    @property
+    def target_edges(self) -> list[Tuple[int, int]]:
+        if self.affected_edges:
+            return self.affected_edges
+        return [self.edge]
 
-        Käyttää ensisijaisesti event_time-arvoa, jos se on asetettu.
-        Muuten käyttää event_step-arvoa siirtymävaiheen yhteensopivuuden vuoksi.
-        """
+    @property
+    def affected_edge_count(self) -> int:
+        return len(self.target_edges)
+
+    @property
+    def event_scope(self) -> str:
+        return "single_edge" if self.affected_edge_count <= 1 else "route_corridor"
+
+    @property
+    def event_scope_label(self) -> str:
+        labels = {
+            "single_edge": "yksittäinen tieosuus",
+            "route_corridor": "toimituskäytävän häiriö",
+        }
+        return labels[self.event_scope]
+
+    @property
+    def impact_spread(self) -> str:
+        count = self.affected_edge_count
+        if count <= 1:
+            return "single_edge"
+        if count <= 3:
+            return "narrow"
+        if count <= 6:
+            return "medium"
+        return "wide"
+
+    @property
+    def impact_spread_label(self) -> str:
+        labels = {
+            "single_edge": "yksi tieosuus",
+            "narrow": "kapea häiriökäytävä",
+            "medium": "keskilaaja häiriökäytävä",
+            "wide": "laaja häiriökäytävä",
+        }
+        return labels[self.impact_spread]
+
+    def should_trigger(self, current_step: int | None = None, current_time: float | None = None) -> bool:
         if self.triggered:
             return False
 
@@ -44,7 +92,4 @@ class EdgeEvent:
         return False
 
     def mark_triggered(self) -> None:
-        """
-        Merkitsee tapahtuman aktivoiduksi.
-        """
         self.triggered = True

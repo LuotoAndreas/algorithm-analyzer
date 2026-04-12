@@ -36,6 +36,9 @@ def run():
         cost_multiplier = 1.0
 
     event_count = int(request.form["event_count"])
+    service_time_seconds = float(request.form.get("service_time_seconds", 120.0))
+    delivery_deadline_factor = float(request.form.get("delivery_deadline_factor", 1.15))
+    disruption_mode = request.form.get("disruption_mode", "route_corridor")
 
     outputs_dir = Path("data") / "outputs"
     outputs_dir.mkdir(parents=True, exist_ok=True)
@@ -49,13 +52,17 @@ def run():
         cost_multiplier=cost_multiplier,
         outputs_dir=outputs_dir,
         event_count=event_count,
+        service_time_seconds=service_time_seconds,
+        delivery_deadline_factor=delivery_deadline_factor,
+        disruption_mode=disruption_mode,
     )
 
-    df = pd.read_csv(result["output_path"])
-    df_success = df[df["failed"] == False]
-
-    plot_distance_increase(df_success, "distance.png")
-    plot_total_time(df_success, "time.png")
+    if result["rows"]:
+        df = pd.read_csv(result["output_path"])
+        df_success = df[df["failed"] == False]
+        if not df_success.empty:
+            plot_distance_increase(df_success, "distance.png")
+            plot_total_time(df_success, "time.png")
 
     grouped_rows = defaultdict(list)
     for row in result["rows"]:

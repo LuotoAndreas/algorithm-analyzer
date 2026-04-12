@@ -201,6 +201,7 @@ class DStarLitePlanner(BasePlanner):
         change_type: str,
         edge: tuple[int, int],
         cost_multiplier: float | None = None,
+        affected_edges: list[tuple[int, int]] | None = None,
     ) -> bool:
         """
         Päivittää D* Liten sisäisen tilan vastaamaan ympäristön muutosta.
@@ -212,17 +213,23 @@ class DStarLitePlanner(BasePlanner):
         if self.last_graph_id != id(graph):
             return False
 
-        u, v = edge
+        target_edges = affected_edges if affected_edges else [edge]
+        changed = False
 
-        if change_type == "remove":
-            return self.core.notify_edge_removed(u, v)
+        for u, v in target_edges:
+            if change_type == "remove":
+                changed = self.core.notify_edge_removed(u, v) or changed
+                continue
 
-        if change_type == "increase_cost":
-            if cost_multiplier is None:
-                raise ValueError("increase_cost vaatii cost_multiplier-arvon.")
-            return self.core.notify_edge_cost_changed(u, v)
+            if change_type == "increase_cost":
+                if cost_multiplier is None:
+                    raise ValueError("increase_cost vaatii cost_multiplier-arvon.")
+                changed = self.core.notify_edge_cost_changed(u, v) or changed
+                continue
 
-        raise ValueError(f"Tuntematon change_type: {change_type}")
+            raise ValueError(f"Tuntematon change_type: {change_type}")
+
+        return changed
 
 
 def get_default_planners() -> list[BasePlanner]:
